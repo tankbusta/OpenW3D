@@ -39,310 +39,102 @@
 #include "debug.h"
 #include "timemgr.h"
 
-#include <dinput.h>
+#include <GameInput.h>
+#include <wrl/client.h>
 
-/*
-**
-*/
-LPDIRECTINPUT			DIObject				= NULL;
-LPDIRECTINPUTDEVICE	DIKeyboardDevice		= NULL;
-LPDIRECTINPUTDEVICE	DIMouseDevice			= NULL;
-LPDIRECTINPUTDEVICE2	DIJoystickDevice		= NULL;
+using Microsoft::WRL::ComPtr;
 
-DIJOYSTATE				DIJoystickState;
+ComPtr<IGameInput>				GIObject = nullptr;
 
-// This warning is a result of the old dinput header we use so just disable it.
-#pragma warning(disable: 4644)
-
-int PASCAL	InitJoystick(LPCDIDEVICEINSTANCE pdinst, LPVOID pvRef);
+// Previous state for detecting transitions
+GameInputKeyState				PreviousKeyState[256] = {};
+GameInputMouseState				PreviousMouseState = {};
 
 char						DirectInput::DIKeyboardButtons[NUM_KEYBOARD_BUTTONS];
 char						DirectInput::DIMouseButtons[NUM_MOUSE_BUTTONS];
 long						DirectInput::DIMouseAxis[NUM_MOUSE_AXIS];
 char						DirectInput::DIJoystickButtons[NUM_MOUSE_BUTTONS];
 float						DirectInput::ButtonLastHitTime[NUM_KEYBOARD_BUTTONS];
-Vector3					DirectInput::CursorPos (0, 0, 0);
+Vector3						DirectInput::CursorPos(0, 0, 0);
 bool						DirectInput::EatMouseHeld = false;
 bool						DirectInput::Captured = false;
-void *					DirectInput::DirectInputLibrary = NULL;
-int						DirectInput::LastKeyPressed = 0;
+void*						DirectInput::DirectInputLibrary = NULL;
+int							DirectInput::LastKeyPressed = 0;
 
 // Temp State Table (only for joystick currently)
-char	Button_State_Table[4] = {	0,
+char	Button_State_Table[4] = { 0,
 								DirectInput::DI_BUTTON_HIT | DirectInput::DI_BUTTON_HELD,
 								DirectInput::DI_BUTTON_RELEASED,
 								DirectInput::DI_BUTTON_HELD };
 
-
-// Buffered input
-#define					DI_KEYBOARD_BUFFER_SIZE			20
-#define					DI_MOUSE_BUFFER_SIZE				20
-
-int PASCAL DirectInputInitJoystick(LPCDIDEVICEINSTANCE pdinst, LPVOID pvRef);
-
-#define	MINIMUM_DIRECTINPUT_VERSION		0x300
-
-// Button bits
 #define		BUTTON_BIT_DOUBLE				8
 #define		BUTTON_DOUBLE_THRESHHOLD	0.25f
 
 
-typedef HRESULT (WINAPI *DirectInput8CreateType) (HINSTANCE hinst, DWORD dwVersion, REFIID riidltf, LPVOID* ppvOut, LPUNKNOWN punkOuter);
-DirectInput8CreateType DirectInput8CreatePtr = NULL;
-
-
 /*
 **
 */
-void DirectInput::Init( void )
+void DirectInput::Init(void)
 {
-	WWDEBUG_SAY(("DirectInput: Init\n"));
+	HRESULT hr;
 
-	HRESULT        hr;
+	WWDEBUG_SAY(("GameInput: Init\n"));
 
-	WWASSERT(DirectInputLibrary == NULL);
-	DirectInputLibrary = LoadLibraryA("DINPUT8.DLL");
-
-	if (DirectInputLibrary != NULL) {
-		DirectInput8CreatePtr = (DirectInput8CreateType) GetProcAddress((HINSTANCE)DirectInputLibrary, "DirectInput8Create");
-
-		if (DirectInput8CreatePtr) {
-
-			// Create the DirectInput Object
-			hr = DirectInput8CreatePtr( ProgramInstance, DIRECTINPUT_VERSION, IID_IDirectInput8, (void**)&DIObject, NULL);
-			if FAILED(hr)
-			{
-				Debug_Say(( "DirectInput %x not available, trying version %x\n", DIRECTINPUT_VERSION/0x100, MINIMUM_DIRECTINPUT_VERSION/0x100 ));
-				hr = DirectInput8CreatePtr( ProgramInstance, MINIMUM_DIRECTINPUT_VERSION, IID_IDirectInput8, (void**)&DIObject, NULL);
-				if FAILED(hr)
-				{
-					Debug_Say(( "DirectInput %x not available\n", MINIMUM_DIRECTINPUT_VERSION ));
-					FreeLibrary((HINSTANCE)DirectInputLibrary);
-					DirectInputLibrary = NULL;
-					return;
-				}
-			}
-		}
-	}
-//	Debug_Say(( "DirectInput object Created\n" ));
-
-	// Create the Keyboard Object
-	hr = DIObject->CreateDevice( GUID_SysKeyboard , &DIKeyboardDevice, NULL);
-	WWASSERT( !FAILED(hr) );
-
-	if ( DIKeyboardDevice != NULL ) {
-
-		// Set the keyboard's data format
-		hr = DIKeyboardDevice->SetDataFormat(&c_dfDIKeyboard);
-		WWASSERT( !FAILED(hr) );
-
-		// Set the keyboard's cooperative level
-		// First we try for "exclusive" access (mainly so debugging works well) if that fails
-		// then we'll take non-exclusive access.
-#if 0
-		hr = DIKeyboardDevice->SetCooperativeLevel( MainWindow,DISCL_FOREGROUND | DISCL_EXCLUSIVE);
-		if (FAILED(hr)) {
-			DIKeyboardDevice->SetCooperativeLevel( MainWindow, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE);
-		}
-#else
-			DIKeyboardDevice->SetCooperativeLevel( MainWindow, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE);
-#endif
-
-		// Set Keyboard Buffer Size
-		DIPROPDWORD dipdw;
-		dipdw.diph.dwSize       = sizeof(dipdw);
-		dipdw.diph.dwHeaderSize = sizeof(dipdw.diph);
-		dipdw.diph.dwObj        = 0;
-		dipdw.diph.dwHow        = DIPH_DEVICE;
-		dipdw.dwData            = DI_KEYBOARD_BUFFER_SIZE;
-		hr = DIKeyboardDevice->SetProperty(DIPROP_BUFFERSIZE, &dipdw.diph);
-		WWASSERT( !FAILED(hr) );
-
-		// Aquire the keyboard
-		hr = DIKeyboardDevice->Acquire();
-		if ( FAILED(hr) ) {
-			Debug_Say(( "DirectInput Keyboard Failed to Aquire\n" ));
-#ifdef WWDEBUG
-			if (hr == DIERR_INVALIDPARAM) WWDEBUG_SAY(("DIERR_INVALIDPARAM\n"));
-			if (hr == DIERR_NOTINITIALIZED) WWDEBUG_SAY(("DIERR_NOTINITIALIZED\n"));
-			if (hr == DIERR_OTHERAPPHASPRIO) WWDEBUG_SAY(("DIERR_OTHERAPPHASPRIO\n"));
-#endif
-		}
-
-//		Debug_Say(( "DirectInput Keyboard Ready\n" ));
+	// Create GameInput instance
+	hr = GameInputCreate(&GIObject);
+	if (FAILED(hr))
+	{
+		Debug_Say(("Failed to create GameInput instance: 0x%x\n", hr));
+		return;
 	}
 
-	// Create the Mouse Object
-	hr = DIObject->CreateDevice( GUID_SysMouse, &DIMouseDevice, NULL );
-	WWASSERT( !FAILED(hr) );
+	GIObject->SetFocusPolicy(GameInputDisableBackgroundInput);
 
-	if ( DIMouseDevice != NULL ) {
+	Debug_Say(("GameInput object created\n"));
 
-		// Set the mouse's data format
-		hr = DIMouseDevice->SetDataFormat(&c_dfDIMouse);
-		WWASSERT( !FAILED(hr) );
 
-		/**/
-		// Set the mouse's cooperative level
-		hr = DIMouseDevice->SetCooperativeLevel( MainWindow,
-						DISCL_EXCLUSIVE | DISCL_FOREGROUND);
-		WWASSERT( !FAILED(hr) );
-		/**/
-
-		// Set Mouse Buffer Size
-		DIPROPDWORD dipdw;
-		dipdw.diph.dwSize       = sizeof(dipdw);
-		dipdw.diph.dwHeaderSize = sizeof(dipdw.diph);
-		dipdw.diph.dwObj        = 0;
-		dipdw.diph.dwHow        = DIPH_DEVICE;
-		dipdw.dwData            = DI_MOUSE_BUFFER_SIZE;
-		hr = DIMouseDevice->SetProperty(DIPROP_BUFFERSIZE, &dipdw.diph);
-		WWASSERT( !FAILED(hr) );
-
-		// Aquire the mouse
-		hr = DIMouseDevice->Acquire();
-		if ( FAILED(hr) ) {
-			Debug_Say(( "DirectInput Mouse Failed to Aquire\n" ));
-			if (hr == DIERR_INVALIDPARAM) {
-				WWDEBUG_SAY(("DIERR_INVALIDPARAM\n"));
-			}
-			if (hr == DIERR_NOTINITIALIZED) {
-				WWDEBUG_SAY(("DIERR_NOTINITIALIZED\n"));
-			}
-			if (hr == DIERR_OTHERAPPHASPRIO) {
-				WWDEBUG_SAY(("DIERR_OTHERAPPHASPRIO\n"));
-			}
-		}
-
-//		Debug_Say(( "DirectInput Mouse Ready\n" ));
-	}
-
-	// Enumerate the Joysticks
-	DIObject->EnumDevices(DI8DEVCLASS_GAMECTRL, InitJoystick, DIObject, DIEDFL_ATTACHEDONLY );
-
-	if ( DIJoystickDevice != NULL ) {
-
-		// Set the joystick's data format
-		hr = DIJoystickDevice->SetDataFormat( &c_dfDIJoystick );
-		WWASSERT( !FAILED(hr) );
-
-		// Set the joystick's cooperative level
-		hr = DIJoystickDevice->SetCooperativeLevel( MainWindow, DISCL_NONEXCLUSIVE | DISCL_FOREGROUND);
-		WWASSERT( !FAILED(hr) );
-
-		DIPROPRANGE diprg;
-		diprg.diph.dwSize       = sizeof(diprg);
-		diprg.diph.dwHeaderSize = sizeof(diprg.diph);
-
-		// Set X Range
-		diprg.diph.dwObj        = DIJOFS_X;
-		diprg.diph.dwHow        = DIPH_BYOFFSET;
-		diprg.lMin              = -1000;
- 		diprg.lMax              = +1000;
-		hr = DIJoystickDevice->SetProperty(DIPROP_RANGE, &diprg.diph);
-		WWASSERT( !FAILED(hr) );
-
-		// Set Y Range
-		diprg.diph.dwObj        = DIJOFS_Y;
-		hr = DIJoystickDevice->SetProperty(DIPROP_RANGE, &diprg.diph);
-		WWASSERT( !FAILED(hr) );
-
-		DIPROPDWORD dipdw;
-		dipdw.diph.dwSize       = sizeof(dipdw);
-		dipdw.diph.dwHeaderSize = sizeof(dipdw.diph);
-
-	   // set X axis dead zone to 20% (to avoid accidental turning)
-		dipdw.diph.dwObj        = DIJOFS_X;
-		dipdw.diph.dwHow        = DIPH_BYOFFSET;
-		dipdw.dwData            = 200;
-		hr = DIJoystickDevice->SetProperty(DIPROP_DEADZONE, &dipdw.diph);
-		WWASSERT( !FAILED(hr) );
-
-	   // set Y axis dead zone to 20% (to avoid accidental turning)
-		dipdw.diph.dwObj        = DIJOFS_Y;
-		hr = DIJoystickDevice->SetProperty(DIPROP_DEADZONE, &dipdw.diph);
-		WWASSERT( !FAILED(hr) );
-
-		// Aquire the mouse
-		hr = DIJoystickDevice->Acquire();
-		if ( FAILED(hr) ) {
-			Debug_Say(( "DirectInput Joystick Failed to Aquire\n" ));
-		}
-	}
 
 	Captured = true;
-
 	Flush();
 
-	//
-	//	Reset the double-click array entries
-	//
-	for ( int index = 0; index < NUM_KEYBOARD_BUTTONS; index++ ) {
+	// Reset the double-click array entries
+	for (int index = 0; index < NUM_KEYBOARD_BUTTONS; index++) {
 		ButtonLastHitTime[index] = 1000;
 	}
 
-	return ;
+	return;
 }
 
 /*
 **
 */
-void DirectInput::Shutdown( void )
+void DirectInput::Shutdown(void)
 {
-	WWDEBUG_SAY(("DirectInput: Shutdown\n"));
+	WWDEBUG_SAY(("GameInput: Shutdown\n"));
 
-	if ( DIKeyboardDevice ) {
-		DIKeyboardDevice->Unacquire();
-		DIKeyboardDevice->Release();
-		DIKeyboardDevice = NULL;
-	}
-
-	if ( DIMouseDevice ) {
-		DIMouseDevice->Unacquire();
-		DIMouseDevice->Release();
-		DIMouseDevice = NULL;
-	}
-
-	if ( DIJoystickDevice ) {
-		DIJoystickDevice->Unacquire();
-		DIJoystickDevice->Release();
-		DIJoystickDevice = NULL;
-	}
-
-	if ( DIObject ) {
-		DIObject->Release();
-		DIObject = NULL;
-		if (DirectInputLibrary) {
-			FreeLibrary((HINSTANCE)DirectInputLibrary);
-		}
-	}
+	GIObject.Reset();
 }
 
 /*
 **
 */
-void DirectInput::Flush( void )
+void DirectInput::Flush(void)
 {
-	memset( DIKeyboardButtons, 0, sizeof(DIKeyboardButtons) );
-	memset( DIMouseButtons, 0, sizeof(DIMouseButtons) );
-	memset( DIMouseAxis, 0, sizeof(DIMouseAxis) );
-	memset( DIJoystickButtons, 0, sizeof(DIJoystickButtons) );
+	memset(DIKeyboardButtons, 0, sizeof(DIKeyboardButtons));
+	memset(DIMouseButtons, 0, sizeof(DIMouseButtons));
+	memset(DIMouseAxis, 0, sizeof(DIMouseAxis));
+	memset(DIJoystickButtons, 0, sizeof(DIJoystickButtons));
+	memset(PreviousKeyState, 0, sizeof(PreviousKeyState));
+	memset(&PreviousMouseState, 0, sizeof(PreviousMouseState));
 }
-
 
 /*
 ** Acquire access to input devices
 */
 void DirectInput::Acquire(void)
 {
-//	WWDEBUG_SAY(("DirectInput: Acquire\n"));
-
-	if (Captured == false) {
+	if (!Captured) {
 		Flush();
-
-		if (DIKeyboardDevice) {
-			DIKeyboardDevice->Acquire();
-		}
 
 		POINT cursorPos;
 		GetCursorPos(&cursorPos);
@@ -351,32 +143,22 @@ void DirectInput::Acquire(void)
 		CursorPos.X = (float)cursorPos.x;
 		CursorPos.Y = (float)cursorPos.y;
 
-		if (DIMouseDevice) {
-			DIMouseDevice->Acquire();
-		}
+		ShowCursor(FALSE);
 
 		Captured = true;
 	}
 }
 
-
 /*
-** Release accesss to input devices.
+** Release access to input devices.
 */
 void DirectInput::Unacquire(void)
 {
-//	WWDEBUG_SAY(("DirectInput: Unacquire\n"));
-
 	if (Captured) {
-		if (DIMouseDevice) {
-			DIMouseDevice->Unacquire();
-		}
-
-		if (DIKeyboardDevice) {
-			DIKeyboardDevice->Unacquire();
-		}
-
 		POINT cursorPos;
+		
+		ShowCursor(TRUE);
+
 		cursorPos.x = (LONG)CursorPos.X;
 		cursorPos.y = (LONG)CursorPos.Y;
 		ClientToScreen(MainWindow, &cursorPos);
@@ -386,311 +168,178 @@ void DirectInput::Unacquire(void)
 	}
 }
 
-
 /*
 **
 */
-int PASCAL InitJoystick(LPCDIDEVICEINSTANCE pdinst, LPVOID pvRef)
+void DirectInput::ReadKeyboard(void)
 {
-   LPDIRECTINPUT pdi = (LPDIRECTINPUT)pvRef;
+	if (!GIObject) return;
 
-	if ( DIJoystickDevice == NULL ) {
+	// Clear previous frame flags
+	for (int i = 0; i < sizeof(DIKeyboardButtons); i++) {
+		DIKeyboardButtons[i] &= DI_BUTTON_HELD;
+	}
 
-		LPDIRECTINPUTDEVICE temp;
-		HRESULT hr;
-		hr = pdi->CreateDevice(pdinst->guidInstance, &temp, NULL);
+	// Get current keyboard reading
+	ComPtr<IGameInputReading> reading;
+	HRESULT hr = GIObject->GetCurrentReading(GameInputKindKeyboard, nullptr, &reading);
 
-		if ( !FAILED(hr)) {
-			hr = temp->QueryInterface(IID_IDirectInputDevice2,
-                                    (LPVOID *)&DIJoystickDevice);
-			IDirectInputDevice_Release(temp);
+	if (SUCCEEDED(hr) && reading)
+	{
+		uint32_t keyCount = reading->GetKeyCount();
+
+		if (keyCount > 0)
+		{
+			GameInputKeyState* keyStates = new GameInputKeyState[keyCount];
+			reading->GetKeyState(keyCount, keyStates);
+
+			// First, check which keys were released (were in previous state but not in current)
+			for (int vkCode = 0; vkCode < NUM_KEYBOARD_BUTTONS; vkCode++) {
+				if (PreviousKeyState[vkCode].virtualKey != 0) {
+					bool stillPressed = false;
+					for (uint32_t i = 0; i < keyCount; i++) {
+						if (keyStates[i].virtualKey == PreviousKeyState[vkCode].virtualKey) {
+							stillPressed = true;
+							break;
+						}
+					}
+
+					if (!stillPressed) {
+						DIKeyboardButtons[vkCode] |= DI_BUTTON_RELEASED;
+						DIKeyboardButtons[vkCode] &= ~DI_BUTTON_HELD;
+						PreviousKeyState[vkCode].virtualKey = 0;
+					}
+				}
+			}
+
+			// Process each currently pressed key
+			for (uint32_t i = 0; i < keyCount; i++)
+			{
+				int vk = keyStates[i].virtualKey;
+				if (vk > 0 && vk < NUM_KEYBOARD_BUTTONS)
+				{
+					bool wasPressed = (PreviousKeyState[vk].virtualKey != 0);
+
+					if (!wasPressed) {
+						DIKeyboardButtons[vk] |= DI_BUTTON_HIT;
+						DIKeyboardButtons[vk] |= DI_BUTTON_HELD;
+						LastKeyPressed = vk;
+					}
+					else {
+						DIKeyboardButtons[vk] |= DI_BUTTON_HELD;
+					}
+
+					PreviousKeyState[vk] = keyStates[i];
+				}
+			}
+
+			delete[] keyStates;
 		}
-		if ( FAILED(hr) ) {
-			Debug_Say(( "Failed to Create Joystick\n" ));
-		} else {
-			return DIENUM_STOP;		// we got one
+		else
+		{
+			// No keys pressed, mark all as released if they were held
+			for (int vkCode = 0; vkCode < NUM_KEYBOARD_BUTTONS; vkCode++) {
+				if (PreviousKeyState[vkCode].virtualKey != 0) {
+					DIKeyboardButtons[vkCode] |= DI_BUTTON_RELEASED;
+					DIKeyboardButtons[vkCode] &= ~DI_BUTTON_HELD;
+					PreviousKeyState[vkCode].virtualKey = 0;
+				}
+			}
 		}
 	}
 
-	return DIENUM_CONTINUE;
+	// Set duplicate keys
+	DIKeyboardButtons[VK_CONTROL] = DIKeyboardButtons[VK_CONTROL] | DIKeyboardButtons[VK_CONTROL];
+	DIKeyboardButtons[VK_SHIFT] = DIKeyboardButtons[VK_LSHIFT] | DIKeyboardButtons[VK_RSHIFT];
+	DIKeyboardButtons[VK_MENU] = DIKeyboardButtons[VK_LMENU] | DIKeyboardButtons[VK_RMENU];
+	DIKeyboardButtons[VK_LWIN] = DIKeyboardButtons[VK_LWIN] | DIKeyboardButtons[VK_RWIN];
 }
 
-
 /*
 **
 */
-void DirectInput::ReadKeyboard( void )
+void DirectInput::ReadMouse(void)
 {
-	if ( DIKeyboardDevice == NULL ) return;
+	if (!GIObject) return;
 
-	for (int i = 0; i < sizeof( DIKeyboardButtons ); i++ ) {
-		DIKeyboardButtons[i] &= DI_BUTTON_HELD;	// make off all but the STATE
+	// Clear previous frame data
+	for (int i = 0; i < sizeof(DIMouseButtons); i++) {
+		DIMouseButtons[i] &= DI_BUTTON_HELD;
 	}
 
-	DWORD buffer_size = 1;
-	DIDEVICEOBJECTDATA	input_buffer;
-
-	bool done = false;
-	while( !done ) {
-		// Jani: Try to acquire first (Acquire doesn't increase ref count).
-		HRESULT hr = DIKeyboardDevice->Acquire();
-		if ( FAILED( hr) ) {
-			return;
-		}
-
-		hr = DIKeyboardDevice->GetDeviceData(
-			sizeof(DIDEVICEOBJECTDATA), &input_buffer, &buffer_size, 0 );
-
-		if FAILED(hr) {
-
-			if ( (hr == DIERR_INPUTLOST) || (hr == DIERR_NOTACQUIRED) ) {
-
-				if (hr == DIERR_INPUTLOST) {
-					Debug_Say(( "DirectInput keyboard lost\n" ));
-				}
-
-				// Try to re-aquire
-				hr = DIKeyboardDevice->Acquire();
-				if ( FAILED( hr) ) {
-	//				Debug_Say(( "DirectInput keyboard not re-aquired\n" ));
-					return;
-				}
-				Debug_Say(( "DirectInput keyboard re-aquired\n" ));
-				continue;
-
-			} else {
-				Debug_Say(( "DirectInput GetDeviceState FAILED %x\n", hr ));
-				return;
-			}
-		}
-
-		if ( buffer_size == 0 ) {
-			done = true;
-		} else {
-			WWASSERT( !(input_buffer.dwOfs & 0x0FF00) );
-
-			if ( input_buffer.dwData & 0x80 ) {
-				DIKeyboardButtons[ input_buffer.dwOfs ] |= DI_BUTTON_HIT;
-				DIKeyboardButtons[ input_buffer.dwOfs ] |= DI_BUTTON_HELD;
-				LastKeyPressed = input_buffer.dwOfs;
-			} else {
-				DIKeyboardButtons[ input_buffer.dwOfs ] |= DI_BUTTON_RELEASED;
-				DIKeyboardButtons[ input_buffer.dwOfs ] &= ~DI_BUTTON_HELD;
-			}
-		}
-	}
-
-	// Set Dupe Keys
-	DIKeyboardButtons[ DIK_CONTROL ]	= DIKeyboardButtons[ DIK_LCONTROL ]	| DIKeyboardButtons[ DIK_RCONTROL ] ;
-	DIKeyboardButtons[ DIK_SHIFT ]	= DIKeyboardButtons[ DIK_LSHIFT ]	| DIKeyboardButtons[ DIK_RSHIFT ] ;
-	DIKeyboardButtons[ DIK_ALT ]		= DIKeyboardButtons[ DIK_LALT ]		| DIKeyboardButtons[ DIK_RALT ];
-	DIKeyboardButtons[ DIK_WIN ]		= DIKeyboardButtons[ DIK_LWIN ]		| DIKeyboardButtons[ DIK_RWIN ];
-
-#if 0
-retry_keyboard:
-	HRESULT  hr = DIKeyboardDevice->GetDeviceState(sizeof(DIKeyboardState),(LPVOID)&DIKeyboardState);
-	if FAILED(hr) {
-
-		if ( (hr == DIERR_INPUTLOST) || (hr == DIERR_NOTACQUIRED) ) {
-
-			if (hr == DIERR_INPUTLOST) {
-				Debug_Say(( "DirectInput keyboard lost\n" ));
-			}
-
-			// Try to re-aquire
-			hr = DIKeyboardDevice->Acquire();
-			if ( FAILED( hr) ) {
-//				Debug_Say(( "DirectInput keyboard not re-aquired\n" ));
-				return;
-			}
-			Debug_Say(( "DirectInput keyboard re-aquired\n" ));
-			goto	retry_keyboard;
-		} else {
-			Debug_Say(( "DirectInput GetDeviceState FAILED %x\n", hr ));
-			return;
-		}
-	}
-
-	// Set Dupe Keys
-	DIKeyboardState[ DIK_CONTROL ]	= DIKeyboardState[ DIK_LCONTROL ]	| DIKeyboardState[ DIK_RCONTROL ] ;
-	DIKeyboardState[ DIK_SHIFT ]		= DIKeyboardState[ DIK_LSHIFT ]		| DIKeyboardState[ DIK_RSHIFT ] ;
-	DIKeyboardState[ DIK_ALT ]			= DIKeyboardState[ DIK_LALT ]			| DIKeyboardState[ DIK_RALT ];
-	DIKeyboardState[ DIK_WIN ]			= DIKeyboardState[ DIK_LWIN ]			| DIKeyboardState[ DIK_RWIN ];
-#endif
-}
-
-
-/*
-**
-*/
-void DirectInput::ReadMouse( void )
-{
-	if ( DIMouseDevice == NULL ) return;
-
-	int i;
-	for (i = 0; i < sizeof( DIMouseButtons ); i++ ) {
-		DIMouseButtons[i] &= DI_BUTTON_HELD;	// make off all but the STATE
-	}
-
-	for (i = 0; i < (sizeof( DIMouseAxis )/sizeof( DIMouseAxis[0] ) ); i++ ) {
+	for (int i = 0; i < (sizeof(DIMouseAxis) / sizeof(DIMouseAxis[0])); i++) {
 		DIMouseAxis[i] = 0;
 	}
 
-	DWORD						buffer_size = 1;
-	DIDEVICEOBJECTDATA	input_buffer;
+	// Get current mouse reading
+	ComPtr<IGameInputReading> reading;
+	HRESULT hr = GIObject->GetCurrentReading(GameInputKindMouse, nullptr, &reading);
+	if (SUCCEEDED(hr) && reading)
+	{
+		GameInputMouseState mouseState;
+		if (reading->GetMouseState(&mouseState))
+		{
+			// Calculate deltas from previous position
+			int deltaX = (int)(mouseState.positionX - PreviousMouseState.positionX);
+			int deltaY = (int)(mouseState.positionY - PreviousMouseState.positionY);
+			int wheelDelta = (int)(mouseState.wheelY - PreviousMouseState.wheelY);
 
-	bool done = false;
-	while( !done ) {
-		// Try to aquire first
-		HRESULT hr = DIMouseDevice->Acquire();
-		if ( FAILED( hr) ) {
-			return;
-		}
-		hr = DIMouseDevice->GetDeviceData(
-			sizeof(DIDEVICEOBJECTDATA), &input_buffer, &buffer_size, 0 );
+			DIMouseAxis[0] = deltaX;
+			DIMouseAxis[1] = deltaY;
+			DIMouseAxis[2] = wheelDelta;
+			CursorPos.X += (float)deltaX * 2;
+			CursorPos.Y += (float)deltaY * 2;
 
-		if FAILED(hr) {
+			// Process mouse buttons (left, right, middle)
+			for (int i = 0; i < 3; i++) {
+				// GameInputMouseButtons uses bits 0, 1, 2 for left, right, middle
+				GameInputMouseButtons buttonBit = (GameInputMouseButtons)(1 << i);
 
-			if ( (hr == DIERR_INPUTLOST) || (hr == DIERR_NOTACQUIRED) ) {
+				bool wasPressed = (PreviousMouseState.buttons & buttonBit) != 0;
+				bool isPressed = (mouseState.buttons & buttonBit) != 0;
 
-				if (hr == DIERR_INPUTLOST) {
-					Debug_Say(( "DirectInput mouse lost\n" ));
+				if (!wasPressed && isPressed) {
+					DIMouseButtons[i] |= DI_BUTTON_HIT;
+					DIMouseButtons[i] |= DI_BUTTON_HELD;
 				}
-
-				// Try to re-aquire
-				hr = DIMouseDevice->Acquire();
-				if ( FAILED( hr) ) {
-	//				Debug_Say(( "DirectInput mouse not re-aquired\n" ));
-					return;
+				else if (wasPressed && !isPressed) {
+					DIMouseButtons[i] |= DI_BUTTON_RELEASED;
+					DIMouseButtons[i] &= ~DI_BUTTON_HELD;
+					if (i == 0) EatMouseHeld = false;
 				}
-				Debug_Say(( "DirectInput mouse re-aquired\n" ));
-				continue;
-
-			} else {
-				Debug_Say(( "DirectInput mouse GetDeviceState FAILED %x\n", hr ));
-				return;
+				else if (isPressed) {
+					// Keep HELD state, don't set HIT again
+					DIMouseButtons[i] |= DI_BUTTON_HELD;
+				}
 			}
-		}
 
-		if ( buffer_size == 0 ) {
-			done = true;
-		} else {
-			int	index = 0;
-
-			switch( input_buffer.dwOfs ) {
-
-				case	DIMOFS_Z:	index++;
-				case	DIMOFS_Y:	index++;
-				case	DIMOFS_X:
-							DIMouseAxis[index]	+= input_buffer.dwData;
-							CursorPos[index]		+= ((int)input_buffer.dwData) * 2;
-			   			break;
-
-				case	DIMOFS_BUTTON2:	index++;
-				case	DIMOFS_BUTTON1:	index++;
-				case	DIMOFS_BUTTON0:
-							if ( input_buffer.dwData & 0x80 ) {
-								DIMouseButtons[ index ] |= DI_BUTTON_HIT;
-								DIMouseButtons[ index ] |= DI_BUTTON_HELD;
-							} else {
-								DIMouseButtons[ index ] |= DI_BUTTON_RELEASED;
-								DIMouseButtons[ index ] &= ~DI_BUTTON_HELD;
-								EatMouseHeld = false;
-							}
-							break;
-			}
+			// Store state for next frame
+			PreviousMouseState = mouseState;
 		}
 	}
 
-	//
-	//	"Eat" the left mouse button as necessary
-	//
-	if ( EatMouseHeld ) {
-		DIMouseButtons[ BUTTON_MOUSE_LEFT & 0xFF ] &= ~DI_BUTTON_HELD;
-		DIMouseButtons[ BUTTON_MOUSE_LEFT & 0xFF ] &= ~DI_BUTTON_HIT;
-		DIMouseButtons[ BUTTON_MOUSE_LEFT & 0xFF ] |= DI_BUTTON_RELEASED;
+	// "Eat" the left mouse button as necessary
+	if (EatMouseHeld) {
+		DIMouseButtons[BUTTON_MOUSE_LEFT & 0xFF] &= ~DI_BUTTON_HELD;
+		DIMouseButtons[BUTTON_MOUSE_LEFT & 0xFF] &= ~DI_BUTTON_HIT;
+		DIMouseButtons[BUTTON_MOUSE_LEFT & 0xFF] |= DI_BUTTON_RELEASED;
 	}
-
-
-#if 0
-retry_mouse:
-	HRESULT  hr = DIMouseDevice->GetDeviceState( sizeof(DIMouseState), (LPVOID)&DIMouseState );
-	if FAILED(hr) {
-
-		if ( (hr == DIERR_INPUTLOST) || (hr == DIERR_NOTACQUIRED) ) {
-
-			if (hr == DIERR_INPUTLOST) {
-				Debug_Say(( "DirectInput mouse lost\n" ));
-			}
-
-			// Try to re-aquire
-			hr = DIMouseDevice->Acquire();
-			if ( FAILED( hr) ) {
-//				Debug_Say(( "DirectInput mouse not re-aquired\n" ));
-				return;
-			}
-			Debug_Say(( "DirectInput mouse re-aquired\n" ));
-			goto	retry_mouse;
-		} else {
-			Debug_Say(( "DirectInput GetDeviceState FAILED %x\n", hr ));
-			return;
-		}
-	}
-
-	DIMouseButtons[ 0 ]	= Button_State_Table[ ((DIMouseButtons[ 0 ]&1) << 1) + ((DIMouseState.rgbButtons[ 0 ] & 0x80 )?1:0) ];
-	DIMouseButtons[ 1 ]	= Button_State_Table[ ((DIMouseButtons[ 1 ]&1) << 1) + ((DIMouseState.rgbButtons[ 1 ] & 0x80 )?1:0) ];
-	DIMouseButtons[ 2 ]	= Button_State_Table[ ((DIMouseButtons[ 2 ]&1) << 1) + ((DIMouseState.rgbButtons[ 2 ] & 0x80 )?1:0) ];
-#endif
 }
 
 
 /*
 **
 */
-void DirectInput::ReadJoystick( void )
+void DirectInput::ReadJoystick(void)
 {
-	if ( DIJoystickDevice == NULL ) return;
-
-    // poll the joystick to read the current state
-retry_joystick:
-
-	HRESULT  hr = DIJoystickDevice->Poll();
-
-	if (FAILED(hr)) {
-
-		if ( (hr == DIERR_INPUTLOST) || (hr == DIERR_NOTACQUIRED) ) {
-
-			if (hr == DIERR_INPUTLOST) {
-				Debug_Say(( "DirectInput Joystick lost\n" ));
-			}
-
-			// Try to re-aquire
-			hr = DIJoystickDevice->Acquire();
-			if ( FAILED( hr) ) {
-//				Debug_Say(( "DirectInput joystick not re-aquired\n" ));
-				return;
-			}
-			Debug_Say(( "DirectInput Joystick re-aquired\n" ));
-			goto	retry_joystick;
-		}
-	}
-
-	hr = DIJoystickDevice->GetDeviceState( sizeof(DIJoystickState), (LPVOID)&DIJoystickState );
-	if FAILED(hr) {
-		Debug_Say(( "DirectInput GetDeviceState FAILED %x\n", hr ));
-		return;
-	}
-
-	DIJoystickButtons[ 0 ]	= Button_State_Table[ ((DIJoystickButtons[ 0 ]&1) << 1) + ((DIJoystickState.rgbButtons[ 0 ] & 0x80 )?1:0) ];
-	DIJoystickButtons[ 1 ]	= Button_State_Table[ ((DIJoystickButtons[ 1 ]&1) << 1) + ((DIJoystickState.rgbButtons[ 1 ] & 0x80 )?1:0) ];
-
+	if (!GIObject) return;
+	// TODO: Need to get a better system in-place
 }
 
-
 /*
-**
+** Read all device input
 */
-void DirectInput::Read( void )
+void DirectInput::Read(void)
 {
 	if (Captured) {
 		ReadKeyboard();
@@ -700,9 +349,8 @@ void DirectInput::Read( void )
 		Update_Double_Clicks();
 	}
 
-	return ;
+	return;
 }
-
 
 /*
 **
@@ -718,13 +366,12 @@ void DirectInput::Eat_Mouse_Held_States (void)
 	return ;
 }
 
-
 /*
 **
 */
 long	DirectInput::Get_Joystick_Axis_State( JoystickAxis axis )
 {
-	return ((long*)&DIJoystickState.lX)[axis];
+	return 0;
 }
 
 

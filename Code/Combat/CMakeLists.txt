@@ -272,6 +272,14 @@ add_library(combat STATIC)
 
 target_link_libraries(combat PRIVATE
     wwcommon
+    GameInput
+)
+
+# Needed for GameInput
+target_compile_definitions(combat PRIVATE
+    WINVER=0x0A00
+    _WIN32_WINNT=0x0A00
+    NTDDI_VERSION=NTDDI_WIN10
 )
 
 target_sources(combat PRIVATE ${COMBAT_SRC})

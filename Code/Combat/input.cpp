@@ -50,8 +50,7 @@
 #include "combat.h"
 #include "ccamera.h"
 
-#include <dinput.h>
-
+#include <GameInput.h>
 #include <stdio.h>
 
 ////////////////////////////////////////////////////////////////
@@ -107,128 +106,137 @@ const char *DEFAULT_INPUT_FILENAME = "DEFAULT_INPUT.CFG";
 #define	ENTRY_MOUSE_2D_INVERT		"Mouse2DInvert"
 #define	ENTRY_TARGET_STEERING		"TargetSteering"
 
-
 typedef struct {
 	short	ID;
 	const char	*Name;
 } StringID;
 
-StringID	ButtonNames[] = {
-	{	DIK_F1,					"F1_Key"						},
-	{	DIK_F2,					"F2_Key"						},
-	{	DIK_F3,					"F3_Key"						},
-	{	DIK_F4,					"F4_Key"						},
-	{	DIK_F5,					"F5_Key"						},
-	{	DIK_F6,					"F6_Key"						},
-	{	DIK_F7,					"F7_Key"						},
-	{	DIK_F8,					"F8_Key"						},
-	{	DIK_F9,					"F9_Key"						},
-	{	DIK_F10,					"F10_Key"					},
-	{	DIK_F11,					"F11_Key"					},
-	{	DIK_F12,					"F12_Key"					},
-	{	DIK_0,					"0_Key"						},
-	{	DIK_1,					"1_Key"						},
-	{	DIK_2,					"2_Key"						},
-	{	DIK_3,					"3_Key"						},
-	{	DIK_4,					"4_Key"						},
-	{	DIK_5,					"5_Key"						},
-	{	DIK_6,					"6_Key"						},
-	{	DIK_7,					"7_Key"						},
-	{	DIK_8,					"8_Key"						},
-	{	DIK_9,					"9_Key"						},
-	{	DIK_A,					"A_Key"						},
-	{	DIK_B,					"B_Key"						},
-	{	DIK_C,					"C_Key"						},
-	{	DIK_D,					"D_Key"						},
-	{	DIK_E,					"E_Key"						},
-	{	DIK_F,					"F_Key"						},
-	{	DIK_G,					"G_Key"						},
-	{	DIK_H,					"H_Key"						},
-	{	DIK_I,					"I_Key"						},
-	{	DIK_J,					"J_Key"						},
-	{	DIK_K,					"K_Key"						},
-	{	DIK_L,					"L_Key"						},
-	{	DIK_M,					"M_Key"						},
-	{	DIK_N,					"N_Key"						},
-	{	DIK_O,					"O_Key"						},
-	{	DIK_P,					"P_Key"						},
-	{	DIK_Q,					"Q_Key"						},
-	{	DIK_R,					"R_Key"						},
-	{	DIK_S,					"S_Key"						},
-	{	DIK_T,					"T_Key"						},
-	{	DIK_U,					"U_Key"						},
-	{	DIK_V,					"V_Key"						},
-	{	DIK_W,					"W_Key"						},
-	{	DIK_X,					"X_Key"						},
-	{	DIK_Y,					"Y_Key"						},
-	{	DIK_Z,					"Z_Key"						},
-	{	DIK_MINUS,				"Minus_Key"					},
-	{	DIK_EQUALS,				"Equals_Key"				},
-	{	DIK_BACK,				"Backspace_Key"			},
-	{	DIK_TAB,					"Tab_Key"					},
-	{	DIK_LBRACKET,			"Left_Bracket_Key" 		},
-	{	DIK_RBRACKET,			"Right_Bracket_Key" 		},
-	{	DIK_RETURN,				"Enter_Key"					},
-	{	DIK_SEMICOLON,			"Semicolon_Key"			},
-	{	DIK_APOSTROPHE,		"Apostrophe_Key"			},
-	{	DIK_GRAVE,				"Grave_Key"					},
-	{	DIK_BACKSLASH,			"Backslash_Key" 			},
-	{	DIK_COMMA,				"Comma_Key" 				},
-	{	DIK_PERIOD,				"Period_Key"				},
-	{	DIK_SLASH,				"Slash_Key" 				},
-	{	DIK_SPACE,				"Space_Bar_Key" 			},
-	{	DIK_CAPITAL,			"Caps_Lock_Key" 			},
-	{	DIK_NUMLOCK,			"Num_Lock_Key" 			},
-	{	DIK_SCROLL,				"Scroll_Lock_Key" 		},
-	{	DIK_ESCAPE,				"Escape_Key"				},
-	{	DIK_NUMPAD0,			"Keypad_0_Key"				},
-	{	DIK_NUMPAD1,			"Keypad_1_Key"				},
-	{	DIK_NUMPAD2,			"Keypad_2_Key"				},
-	{	DIK_NUMPAD3,			"Keypad_3_Key"				},
-	{	DIK_NUMPAD4,			"Keypad_4_Key"				},
-	{	DIK_NUMPAD5,			"Keypad_5_Key"				},
-	{	DIK_NUMPAD6,			"Keypad_6_Key"				},
-	{	DIK_NUMPAD7,			"Keypad_7_Key"				},
-	{	DIK_NUMPAD8,			"Keypad_8_Key"				},
-	{	DIK_NUMPAD9,			"Keypad_9_Key"				},
-	{	DIK_SUBTRACT,			"Keypad_Minus_Key" 		},
-	{	DIK_MULTIPLY,			"Keypad_Star_Key"	 		},
-	{	DIK_ADD,					"Keypad_Plus_Key"	 		},
-	{	DIK_DECIMAL,			"Keypad_Period_Key" 		},
-	{	DIK_NUMPADENTER,		"Keypad_Enter_Key"  		},
-	{	DIK_DIVIDE,				"Keypad_Slash_Key"  		},
-	{	DIK_HOME,				"Home_Key"  				},
-	{	DIK_PRIOR,				"Page_Up_Key"  			},
-	{	DIK_END,					"End_Key"  					},
-	{	DIK_NEXT,				"Page_Down_Key"  			},
-	{	DIK_INSERT,				"Insert_Key"  				},
-	{	DIK_DELETE,				"Delete_Key"  				},
-	{	DIK_UP,					"Up_Key"  					},
-	{	DIK_DOWN,				"Down_Key"  				},
-	{	DIK_LEFT,				"Left_Key"  				},
-	{	DIK_RIGHT,				"Right_Key"  				},
-	{	DIK_SYSRQ,				"Sys_Req_Key"  			},
-	{	DIK_CONTROL,			"Control_Key"				},
-	{	DIK_LCONTROL,			"Left_Control_Key"		},
-	{	DIK_RCONTROL,			"Right_Control_Key"		},
-	{	DIK_SHIFT,				"Shift_Key" 				},
-	{	DIK_LSHIFT,				"Left_Shift_Key" 			},
-	{	DIK_RSHIFT,				"Right_Shift_Key" 		},
-	{	DIK_ALT,					"Alt_Key"		 			},
-	{	DIK_LALT,				"Left_Alt_Key" 			},
-	{	DIK_RALT,				"Right_Alt_Key" 			},
-	{	DIK_WIN,					"Windows_Key"  			},
-	{	DIK_LWIN,				"Left_Windows_Key"  		},
-	{	DIK_RWIN,				"Right_Windows_Key"  	},
-	{	DIK_APPS,				"App_Menu_Key"  			},
+StringID ButtonNames[] = {
+	// Function Keys
+	{ VK_F1,                "F1_Key"                    },
+	{ VK_F2,                "F2_Key"                    },
+	{ VK_F3,                "F3_Key"                    },
+	{ VK_F4,                "F4_Key"                    },
+	{ VK_F5,                "F5_Key"                    },
+	{ VK_F6,                "F6_Key"                    },
+	{ VK_F7,                "F7_Key"                    },
+	{ VK_F8,                "F8_Key"                    },
+	{ VK_F9,                "F9_Key"                    },
+	{ VK_F10,               "F10_Key"                   },
+	{ VK_F11,               "F11_Key"                   },
+	{ VK_F12,               "F12_Key"                   },
 
-	{	DirectInput::BUTTON_MOUSE_LEFT,	"Left_Mouse_Button"		},
-	{	DirectInput::BUTTON_MOUSE_RIGHT,	"Right_Mouse_Button"		},
-	{	DirectInput::BUTTON_MOUSE_CENTER,	"Center_Mouse_Button"	},
+	// Number Keys (top row)
+	{ '0',                  "0_Key"                     },
+	{ '1',                  "1_Key"                     },
+	{ '2',                  "2_Key"                     },
+	{ '3',                  "3_Key"                     },
+	{ '4',                  "4_Key"                     },
+	{ '5',                  "5_Key"                     },
+	{ '6',                  "6_Key"                     },
+	{ '7',                  "7_Key"                     },
+	{ '8',                  "8_Key"                     },
+	{ '9',                  "9_Key"                     },
 
-	{	DirectInput::BUTTON_JOYSTICK_A,	"Joystick_Button_A"		},
-	{	DirectInput::BUTTON_JOYSTICK_B,	"Joystick_Button_B"		},
+	// Letter Keys (A-Z)
+	{ 'A',                  "A_Key"                     },
+	{ 'B',                  "B_Key"                     },
+	{ 'C',                  "C_Key"                     },
+	{ 'D',                  "D_Key"                     },
+	{ 'E',                  "E_Key"                     },
+	{ 'F',                  "F_Key"                     },
+	{ 'G',                  "G_Key"                     },
+	{ 'H',                  "H_Key"                     },
+	{ 'I',                  "I_Key"                     },
+	{ 'J',                  "J_Key"                     },
+	{ 'K',                  "K_Key"                     },
+	{ 'L',                  "L_Key"                     },
+	{ 'M',                  "M_Key"                     },
+	{ 'N',                  "N_Key"                     },
+	{ 'O',                  "O_Key"                     },
+	{ 'P',                  "P_Key"                     },
+	{ 'Q',                  "Q_Key"                     },
+	{ 'R',                  "R_Key"                     },
+	{ 'S',                  "S_Key"                     },
+	{ 'T',                  "T_Key"                     },
+	{ 'U',                  "U_Key"                     },
+	{ 'V',                  "V_Key"                     },
+	{ 'W',                  "W_Key"                     },
+	{ 'X',                  "X_Key"                     },
+	{ 'Y',                  "Y_Key"                     },
+	{ 'Z',                  "Z_Key"                     },
 
+	// Special Character Keys
+	{ VK_OEM_MINUS,         "Minus_Key"                 },      // - key
+	{ VK_OEM_PLUS,          "Equals_Key"                },      // = key
+	{ VK_BACK,              "Backspace_Key"             },
+	{ VK_TAB,               "Tab_Key"                   },
+	{ VK_OEM_4,             "Left_Bracket_Key"          },      // [ key
+	{ VK_OEM_6,             "Right_Bracket_Key"         },      // ] key
+	{ VK_RETURN,            "Enter_Key"                 },
+	{ VK_OEM_1,             "Semicolon_Key"             },      // ; key
+	{ VK_OEM_7,             "Apostrophe_Key"            },      // ' key
+	{ VK_OEM_3,             "Grave_Key"                 },      // ` key
+	{ VK_OEM_5,             "Backslash_Key"             },      // \ key
+	{ VK_OEM_COMMA,         "Comma_Key"                 },      // , key
+	{ VK_OEM_PERIOD,        "Period_Key"                },      // . key
+	{ VK_OEM_2,             "Slash_Key"                 },      // / key
+	{ VK_SPACE,             "Space_Bar_Key"             },
+	{ VK_CAPITAL,           "Caps_Lock_Key"             },
+	{ VK_NUMLOCK,           "Num_Lock_Key"              },
+	{ VK_SCROLL,            "Scroll_Lock_Key"           },
+	{ VK_ESCAPE,            "Escape_Key"                },
+
+	// Numpad Keys
+	{ VK_NUMPAD0,           "Keypad_0_Key"              },
+	{ VK_NUMPAD1,           "Keypad_1_Key"              },
+	{ VK_NUMPAD2,           "Keypad_2_Key"              },
+	{ VK_NUMPAD3,           "Keypad_3_Key"              },
+	{ VK_NUMPAD4,           "Keypad_4_Key"              },
+	{ VK_NUMPAD5,           "Keypad_5_Key"              },
+	{ VK_NUMPAD6,           "Keypad_6_Key"              },
+	{ VK_NUMPAD7,           "Keypad_7_Key"              },
+	{ VK_NUMPAD8,           "Keypad_8_Key"              },
+	{ VK_NUMPAD9,           "Keypad_9_Key"              },
+	{ VK_SUBTRACT,          "Keypad_Minus_Key"          },
+	{ VK_MULTIPLY,          "Keypad_Star_Key"           },
+	{ VK_ADD,               "Keypad_Plus_Key"           },
+	{ VK_DECIMAL,           "Keypad_Period_Key"         },
+	{ VK_SEPARATOR,         "Keypad_Enter_Key"          },
+	{ VK_DIVIDE,            "Keypad_Slash_Key"          },
+
+	// Navigation Keys
+	{ VK_HOME,              "Home_Key"                  },
+	{ VK_PRIOR,             "Page_Up_Key"               },
+	{ VK_END,               "End_Key"                   },
+	{ VK_NEXT,              "Page_Down_Key"             },
+	{ VK_INSERT,            "Insert_Key"                },
+	{ VK_DELETE,            "Delete_Key"                },
+	{ VK_UP,                "Up_Key"                    },
+	{ VK_DOWN,              "Down_Key"                  },
+	{ VK_LEFT,              "Left_Key"                  },
+	{ VK_RIGHT,             "Right_Key"                 },
+
+	// System Keys
+	{ VK_SNAPSHOT,          "Sys_Req_Key"               },      // Print Screen/SysRq
+
+	// Modifier Keys
+	{ VK_CONTROL,           "Control_Key"               },
+	{ VK_LCONTROL,          "Left_Control_Key"          },
+	{ VK_RCONTROL,          "Right_Control_Key"         },
+	{ VK_SHIFT,             "Shift_Key"                 },
+	{ VK_LSHIFT,            "Left_Shift_Key"            },
+	{ VK_RSHIFT,            "Right_Shift_Key"           },
+	{ VK_MENU,              "Alt_Key"                   },      // VK_MENU is Alt
+	{ VK_LMENU,             "Left_Alt_Key"              },
+	{ VK_RMENU,             "Right_Alt_Key"             },
+	{ VK_LWIN,              "Left_Windows_Key"          },
+	{ VK_RWIN,              "Right_Windows_Key"         },
+	{ VK_APPS,              "App_Menu_Key"              },
+
+	{ DirectInput::BUTTON_MOUSE_LEFT,     "Left_Mouse_Button"     },
+	{ DirectInput::BUTTON_MOUSE_RIGHT,    "Right_Mouse_Button"    },
+	{ DirectInput::BUTTON_MOUSE_CENTER,   "Center_Mouse_Button"   },
 };
 
 #define	NUM_BUTTON_NAMES	( sizeof(ButtonNames) / sizeof(ButtonNames[0]) )
@@ -248,6 +256,13 @@ StringID	SliderNames[] = {
 };
 
 #define	NUM_SLIDER_NAMES	( sizeof( SliderNames ) / sizeof( SliderNames[0] ) )
+
+StringID GamepadButtonNames[] = {
+	{ GameInputGamepadA,      "Joystick_Button_A"     },
+	{ GameInputGamepadB,      "Joystick_Button_B"     },
+};
+
+#define	NUM_GAMEPAD_BUTTON_NAMES	( sizeof( GamepadButtonNames ) / sizeof( GamepadButtonNames[0] ) )
 
 #define	NUM_FUNCTIONS	INPUT_FUNCTION_COUNT
 
@@ -882,10 +897,10 @@ void	Input::Update( void )
 			// check for the num-pad enter key
 			//
 			if (value1 == 0.0F && value2 == 0.0F) {
-				if (	FunctionPrimaryKeys[index] == DIK_RETURN ||
-						FunctionSecondaryKeys[index] == DIK_RETURN)
+				if (	FunctionPrimaryKeys[index] == VK_RETURN ||
+						FunctionSecondaryKeys[index] == VK_RETURN)
 				{
-					value1 = Get_Value (index, DIK_NUMPADENTER, 1.0F);
+					value1 = Get_Value (index, VK_RETURN, 1.0F);
 				}
 			}
 
@@ -1065,14 +1080,14 @@ float	Input::Get_Value( int function_index, int input, float clamp )
 
 		// Special case ctrl and alt for the 0 - 9 keys
 		// Assumtion:  DIK_keys go 1,2,3..9,0
-		if ( (input&0xFF) >= DIK_1 && (input&0xFF) <= DIK_0 ) {
+		if ( (input&0xFF) >= '1' && (input & 0xFF) <= '0') {
 			// Shift is a key, used for walk!
 //			modifier |= ((DirectInput::Get_Button_Value(DIK_SHIFT) & BUTTON_BIT_HELD) ? BUTTON_SHIFT : 0);
-			modifier |= ((DirectInput::Get_Button_Value(DIK_CONTROL) & BUTTON_BIT_HELD) ? BUTTON_CTRL : 0);
-			modifier |= ((DirectInput::Get_Button_Value(DIK_ALT) & BUTTON_BIT_HELD) ? BUTTON_ALT : 0);
+			modifier |= ((DirectInput::Get_Button_Value(VK_CONTROL) & BUTTON_BIT_HELD) ? BUTTON_CTRL : 0);
+			modifier |= ((DirectInput::Get_Button_Value(VK_MENU) & BUTTON_BIT_HELD) ? BUTTON_ALT : 0);
 		}
 
-		modifier |= ((DirectInput::Get_Button_Value(DIK_F9) & BUTTON_BIT_HELD) ? BUTTON_DEBUG : 0);
+		modifier |= ((DirectInput::Get_Button_Value(VK_F9) & BUTTON_BIT_HELD) ? BUTTON_DEBUG : 0);
 
 		int funcModifier = (FunctionKeyStates[function_index] & 0xF000);
 
@@ -1123,58 +1138,48 @@ short	Input::Get_Function( const char *name )
 /*
 **
 */
-const char *Input::Get_Key_Name( short key_id )
+const char* Input::Get_Key_Name(short key_id)
 {
-	//
 	// Check each button name
-	//
-	int index;
-	for (index = 0; index < NUM_BUTTON_NAMES; index ++) {
+	for (int index = 0; index < NUM_BUTTON_NAMES; index++) {
 		if (ButtonNames[index].ID == key_id) {
 			return ButtonNames[index].Name;
 		}
 	}
 
-	//
 	// Check each slider name
-	//
-	for (index = 0; index < NUM_SLIDER_NAMES; index ++) {
+	for (int index = 0; index < NUM_SLIDER_NAMES; index++) {
 		if (SliderNames[index].ID == key_id) {
 			return SliderNames[index].Name;
 		}
 	}
 
-	Debug_Say(( "Could not find a name for key %d\n", key_id ));
+	Debug_Say(("Could not find a name for key %d\n", key_id));
 	return NULL;
 }
 
 /*
 **
 */
-short	Input::Get_Key( const char *name )
+short Input::Get_Key(const char* name)
 {
 	if (name != NULL && name[0] != 0) {
 
-		//
 		// Check each button name
-		//
-		int index;
-		for (index = 0; index < NUM_BUTTON_NAMES; index ++) {
-			if (::stricmp (name, ButtonNames[index].Name) == 0) {
+		for (int index = 0; index < NUM_BUTTON_NAMES; index++) {
+			if (_stricmp(name, ButtonNames[index].Name) == 0) {
 				return ButtonNames[index].ID;
 			}
 		}
 
-		//
 		// Check each slider name
-		//
-		for (index = 0; index < NUM_SLIDER_NAMES; index ++) {
+		for (int index = 0; index < NUM_SLIDER_NAMES; index ++) {
 			if (::stricmp (name, SliderNames[index].Name) == 0) {
 				return SliderNames[index].ID;
 			}
 		}
 
-		Debug_Say(( "Could not find key name %s\n", name ));
+		Debug_Say(("Could not find key name %s\n", name));
 	}
 
 	return 0;
@@ -1327,128 +1332,153 @@ typedef struct
 
 const KEY_NAME_MAPPING DIK_KEY_NAME_ARRAY[] =
 {
-	{	IDS_KEYNAME_DIK_F1,			DIK_F1 },
-	{	IDS_KEYNAME_DIK_F2,			DIK_F2 },
-	{	IDS_KEYNAME_DIK_F3,			DIK_F3 },
-	{	IDS_KEYNAME_DIK_F4,			DIK_F4 },
-	{	IDS_KEYNAME_DIK_F5,			DIK_F5 },
-	{	IDS_KEYNAME_DIK_F6,			DIK_F6 },
-	{	IDS_KEYNAME_DIK_F7,			DIK_F7 },
-	{	IDS_KEYNAME_DIK_F8,			DIK_F8 },
-	{	IDS_KEYNAME_DIK_F9,			DIK_F9 },
-	{	IDS_KEYNAME_DIK_F10,			DIK_F10 },
-	{	IDS_KEYNAME_DIK_F11,			DIK_F11 },
-	{	IDS_KEYNAME_DIK_F12,			DIK_F12 },
-	{	IDS_KEYNAME_DIK_0,			DIK_0 },
-	{	IDS_KEYNAME_DIK_1,			DIK_1 },
-	{	IDS_KEYNAME_DIK_2,			DIK_2 },
-	{	IDS_KEYNAME_DIK_3,			DIK_3 },
-	{	IDS_KEYNAME_DIK_4,			DIK_4 },
-	{	IDS_KEYNAME_DIK_5,			DIK_5 },
-	{	IDS_KEYNAME_DIK_6,			DIK_6 },
-	{	IDS_KEYNAME_DIK_7,			DIK_7 },
-	{	IDS_KEYNAME_DIK_8,			DIK_8 },
-	{	IDS_KEYNAME_DIK_9,			DIK_9 },
-	{	IDS_KEYNAME_DIK_A,			DIK_A },
-	{	IDS_KEYNAME_DIK_B,			DIK_B },
-	{	IDS_KEYNAME_DIK_C,			DIK_C },
-	{	IDS_KEYNAME_DIK_D,			DIK_D },
-	{	IDS_KEYNAME_DIK_E,			DIK_E },
-	{	IDS_KEYNAME_DIK_F,			DIK_F },
-	{	IDS_KEYNAME_DIK_G,			DIK_G },
-	{	IDS_KEYNAME_DIK_H,			DIK_H },
-	{	IDS_KEYNAME_DIK_I,			DIK_I },
-	{	IDS_KEYNAME_DIK_J,			DIK_J },
-	{	IDS_KEYNAME_DIK_K,			DIK_K },
-	{	IDS_KEYNAME_DIK_L,			DIK_L },
-	{	IDS_KEYNAME_DIK_M,			DIK_M },
-	{	IDS_KEYNAME_DIK_N,			DIK_N },
-	{	IDS_KEYNAME_DIK_O,			DIK_O },
-	{	IDS_KEYNAME_DIK_P,			DIK_P },
-	{	IDS_KEYNAME_DIK_Q,			DIK_Q },
-	{	IDS_KEYNAME_DIK_R,			DIK_R },
-	{	IDS_KEYNAME_DIK_S,			DIK_S },
-	{	IDS_KEYNAME_DIK_T,			DIK_T },
-	{	IDS_KEYNAME_DIK_U,			DIK_U },
-	{	IDS_KEYNAME_DIK_V,			DIK_V },
-	{	IDS_KEYNAME_DIK_W,			DIK_W },
-	{	IDS_KEYNAME_DIK_X,			DIK_X },
-	{	IDS_KEYNAME_DIK_Y,			DIK_Y },
-	{	IDS_KEYNAME_DIK_Z,			DIK_Z },
-	{	IDS_KEYNAME_DIK_MINUS,		DIK_MINUS },
-	{	IDS_KEYNAME_DIK_EQUALS,		DIK_EQUALS },
-	{	IDS_KEYNAME_DIK_BACK,		DIK_BACK },
-	{	IDS_KEYNAME_DIK_TAB,			DIK_TAB },
-	{	IDS_KEYNAME_DIK_LBRACKET,	DIK_LBRACKET },
-	{	IDS_KEYNAME_DIK_RBRACKET,	DIK_RBRACKET },
-	{	IDS_KEYNAME_DIK_RETURN,		DIK_RETURN },
-	{	IDS_KEYNAME_DIK_SEMICOLON,	DIK_SEMICOLON },
-	{	IDS_KEYNAME_DIK_APOSTROPHE,DIK_APOSTROPHE },
-	{	IDS_KEYNAME_DIK_GRAVE,		DIK_GRAVE },
-	{	IDS_KEYNAME_DIK_BACKSLASH,	DIK_BACKSLASH },
-	{	IDS_KEYNAME_DIK_COMMA,		DIK_COMMA },
-	{	IDS_KEYNAME_DIK_PERIOD,		DIK_PERIOD },
-	{	IDS_KEYNAME_DIK_SLASH,		DIK_SLASH },
-	{	IDS_KEYNAME_DIK_SPACE,		DIK_SPACE },
-	{	IDS_KEYNAME_DIK_CAPITAL,	DIK_CAPITAL },
-	{	IDS_KEYNAME_DIK_NUMLOCK,	DIK_NUMLOCK },
-	{	IDS_KEYNAME_DIK_SCROLL,		DIK_SCROLL },
-	{	IDS_KEYNAME_DIK_ESCAPE,		DIK_ESCAPE },
-	{	IDS_KEYNAME_DIK_NUMPAD0,	DIK_NUMPAD0 },
-	{	IDS_KEYNAME_DIK_NUMPAD1,	DIK_NUMPAD1 },
-	{	IDS_KEYNAME_DIK_NUMPAD2,	DIK_NUMPAD2 },
-	{	IDS_KEYNAME_DIK_NUMPAD3,	DIK_NUMPAD3 },
-	{	IDS_KEYNAME_DIK_NUMPAD4,	DIK_NUMPAD4 },
-	{	IDS_KEYNAME_DIK_NUMPAD5,	DIK_NUMPAD5 },
-	{	IDS_KEYNAME_DIK_NUMPAD6,	DIK_NUMPAD6 },
-	{	IDS_KEYNAME_DIK_NUMPAD7,	DIK_NUMPAD7 },
-	{	IDS_KEYNAME_DIK_NUMPAD8,	DIK_NUMPAD8 },
-	{	IDS_KEYNAME_DIK_NUMPAD9,	DIK_NUMPAD9 },
-	{	IDS_KEYNAME_DIK_SUBTRACT,	DIK_SUBTRACT },
-	{	IDS_KEYNAME_DIK_MULTIPLY,	DIK_MULTIPLY },
-	{	IDS_KEYNAME_DIK_ADD,			DIK_ADD },
-	{	IDS_KEYNAME_DIK_DECIMAL,		DIK_DECIMAL },
-	{	IDS_KEYNAME_DIK_NUMPADENTER,	DIK_NUMPADENTER },
-	{	IDS_KEYNAME_DIK_DIVIDE,		DIK_DIVIDE },
-	{	IDS_KEYNAME_DIK_HOME,		DIK_HOME },
-	{	IDS_KEYNAME_DIK_PRIOR,		DIK_PRIOR },
-	{	IDS_KEYNAME_DIK_END,			DIK_END },
-	{	IDS_KEYNAME_DIK_NEXT,		DIK_NEXT },
-	{	IDS_KEYNAME_DIK_INSERT,		DIK_INSERT },
-	{	IDS_KEYNAME_DIK_DELETE,		DIK_DELETE },
-	{	IDS_KEYNAME_DIK_UP,			DIK_UP },
-	{	IDS_KEYNAME_DIK_DOWN,		DIK_DOWN },
-	{	IDS_KEYNAME_DIK_LEFT,		DIK_LEFT },
-	{	IDS_KEYNAME_DIK_RIGHT,		DIK_RIGHT },
-	{	IDS_KEYNAME_DIK_SYSRQ,		DIK_SYSRQ },
-	{	IDS_KEYNAME_DIK_CONTROL,	DIK_CONTROL },
-	{	IDS_KEYNAME_DIK_LCONTROL,	DIK_LCONTROL },
-	{	IDS_KEYNAME_DIK_RCONTROL,	DIK_RCONTROL },
-	{	IDS_KEYNAME_DIK_SHIFT,		DIK_SHIFT },
-	{	IDS_KEYNAME_DIK_LSHIFT,		DIK_LSHIFT },
-	{	IDS_KEYNAME_DIK_RSHIFT,		DIK_RSHIFT },
-	{	IDS_KEYNAME_DIK_ALT,			DIK_ALT },
-	{	IDS_KEYNAME_DIK_LALT,		DIK_LALT },
-	{	IDS_KEYNAME_DIK_RALT,		DIK_RALT },
-	{	IDS_KEYNAME_DIK_WIN,			DIK_WIN },
-	{	IDS_KEYNAME_DIK_LWIN,		DIK_LWIN },
-	{	IDS_KEYNAME_DIK_RWIN,		DIK_RWIN },
-	{	IDS_KEYNAME_DIK_APPS,		DIK_APPS },
-	{	IDS_INPUT_LBUTTON,			DirectInput::BUTTON_MOUSE_LEFT },
-	{	IDS_INPUT_RBUTTON,			DirectInput::BUTTON_MOUSE_RIGHT },
-	{	IDS_INPUT_MBUTTON,			DirectInput::BUTTON_MOUSE_CENTER },
-	{	IDS_INPUT_MW_UP,				Input::SLIDER_MOUSE_WHEEL_FORWARD },
-	{	IDS_INPUT_MW_DN,				Input::SLIDER_MOUSE_WHEEL_BACKWARD },
-	{	0,									DirectInput::BUTTON_JOYSTICK_A },
-	{	0,									DirectInput::BUTTON_JOYSTICK_B },
-	{	0,									Input::SLIDER_MOUSE_LEFT },
-	{	0,									Input::SLIDER_MOUSE_RIGHT },
-	{	0,									Input::SLIDER_MOUSE_UP },
-	{	0,									Input::SLIDER_MOUSE_DOWN },
-	{	0,									Input::SLIDER_JOYSTICK_LEFT },
-	{	0,									Input::SLIDER_JOYSTICK_RIGHT },
-	{	0,									Input::SLIDER_JOYSTICK_UP },
-	{	0,									Input::SLIDER_JOYSTICK_DOWN },
+	// Function Keys
+		{   IDS_KEYNAME_DIK_F1,         VK_F1 },
+		{   IDS_KEYNAME_DIK_F2,         VK_F2 },
+		{   IDS_KEYNAME_DIK_F3,         VK_F3 },
+		{   IDS_KEYNAME_DIK_F4,         VK_F4 },
+		{   IDS_KEYNAME_DIK_F5,         VK_F5 },
+		{   IDS_KEYNAME_DIK_F6,         VK_F6 },
+		{   IDS_KEYNAME_DIK_F7,         VK_F7 },
+		{   IDS_KEYNAME_DIK_F8,         VK_F8 },
+		{   IDS_KEYNAME_DIK_F9,         VK_F9 },
+		{   IDS_KEYNAME_DIK_F10,        VK_F10 },
+		{   IDS_KEYNAME_DIK_F11,        VK_F11 },
+		{   IDS_KEYNAME_DIK_F12,        VK_F12 },
+
+		// Number Keys (top row)
+		{   IDS_KEYNAME_DIK_0,          '0' },
+		{   IDS_KEYNAME_DIK_1,          '1' },
+		{   IDS_KEYNAME_DIK_2,          '2' },
+		{   IDS_KEYNAME_DIK_3,          '3' },
+		{   IDS_KEYNAME_DIK_4,          '4' },
+		{   IDS_KEYNAME_DIK_5,          '5' },
+		{   IDS_KEYNAME_DIK_6,          '6' },
+		{   IDS_KEYNAME_DIK_7,          '7' },
+		{   IDS_KEYNAME_DIK_8,          '8' },
+		{   IDS_KEYNAME_DIK_9,          '9' },
+
+		// Letter Keys (A-Z)
+		{   IDS_KEYNAME_DIK_A,          'A' },
+		{   IDS_KEYNAME_DIK_B,          'B' },
+		{   IDS_KEYNAME_DIK_C,          'C' },
+		{   IDS_KEYNAME_DIK_D,          'D' },
+		{   IDS_KEYNAME_DIK_E,          'E' },
+		{   IDS_KEYNAME_DIK_F,          'F' },
+		{   IDS_KEYNAME_DIK_G,          'G' },
+		{   IDS_KEYNAME_DIK_H,          'H' },
+		{   IDS_KEYNAME_DIK_I,          'I' },
+		{   IDS_KEYNAME_DIK_J,          'J' },
+		{   IDS_KEYNAME_DIK_K,          'K' },
+		{   IDS_KEYNAME_DIK_L,          'L' },
+		{   IDS_KEYNAME_DIK_M,          'M' },
+		{   IDS_KEYNAME_DIK_N,          'N' },
+		{   IDS_KEYNAME_DIK_O,          'O' },
+		{   IDS_KEYNAME_DIK_P,          'P' },
+		{   IDS_KEYNAME_DIK_Q,          'Q' },
+		{   IDS_KEYNAME_DIK_R,          'R' },
+		{   IDS_KEYNAME_DIK_S,          'S' },
+		{   IDS_KEYNAME_DIK_T,          'T' },
+		{   IDS_KEYNAME_DIK_U,          'U' },
+		{   IDS_KEYNAME_DIK_V,          'V' },
+		{   IDS_KEYNAME_DIK_W,          'W' },
+		{   IDS_KEYNAME_DIK_X,          'X' },
+		{   IDS_KEYNAME_DIK_Y,          'Y' },
+		{   IDS_KEYNAME_DIK_Z,          'Z' },
+
+		// Special Character Keys
+		{   IDS_KEYNAME_DIK_MINUS,      VK_OEM_MINUS },     // - key
+		{   IDS_KEYNAME_DIK_EQUALS,     VK_OEM_PLUS },      // = key
+		{   IDS_KEYNAME_DIK_BACK,       VK_BACK },
+		{   IDS_KEYNAME_DIK_TAB,        VK_TAB },
+		{   IDS_KEYNAME_DIK_LBRACKET,   VK_OEM_4 },         // [ key
+		{   IDS_KEYNAME_DIK_RBRACKET,   VK_OEM_6 },         // ] key
+		{   IDS_KEYNAME_DIK_RETURN,     VK_RETURN },
+		{   IDS_KEYNAME_DIK_SEMICOLON,  VK_OEM_1 },         // ; key
+		{   IDS_KEYNAME_DIK_APOSTROPHE, VK_OEM_7 },         // ' key
+		{   IDS_KEYNAME_DIK_GRAVE,      VK_OEM_3 },         // ` key
+		{   IDS_KEYNAME_DIK_BACKSLASH,  VK_OEM_5 },         // \ key
+		{   IDS_KEYNAME_DIK_COMMA,      VK_OEM_COMMA },     // , key
+		{   IDS_KEYNAME_DIK_PERIOD,     VK_OEM_PERIOD },    // . key
+		{   IDS_KEYNAME_DIK_SLASH,      VK_OEM_2 },         // / key
+		{   IDS_KEYNAME_DIK_SPACE,      VK_SPACE },
+		{   IDS_KEYNAME_DIK_CAPITAL,    VK_CAPITAL },
+		{   IDS_KEYNAME_DIK_NUMLOCK,    VK_NUMLOCK },
+		{   IDS_KEYNAME_DIK_SCROLL,     VK_SCROLL },
+		{   IDS_KEYNAME_DIK_ESCAPE,     VK_ESCAPE },
+
+		// Numpad Keys
+		{   IDS_KEYNAME_DIK_NUMPAD0,    VK_NUMPAD0 },
+		{   IDS_KEYNAME_DIK_NUMPAD1,    VK_NUMPAD1 },
+		{   IDS_KEYNAME_DIK_NUMPAD2,    VK_NUMPAD2 },
+		{   IDS_KEYNAME_DIK_NUMPAD3,    VK_NUMPAD3 },
+		{   IDS_KEYNAME_DIK_NUMPAD4,    VK_NUMPAD4 },
+		{   IDS_KEYNAME_DIK_NUMPAD5,    VK_NUMPAD5 },
+		{   IDS_KEYNAME_DIK_NUMPAD6,    VK_NUMPAD6 },
+		{   IDS_KEYNAME_DIK_NUMPAD7,    VK_NUMPAD7 },
+		{   IDS_KEYNAME_DIK_NUMPAD8,    VK_NUMPAD8 },
+		{   IDS_KEYNAME_DIK_NUMPAD9,    VK_NUMPAD9 },
+		{   IDS_KEYNAME_DIK_SUBTRACT,   VK_SUBTRACT },
+		{   IDS_KEYNAME_DIK_MULTIPLY,   VK_MULTIPLY },
+		{   IDS_KEYNAME_DIK_ADD,        VK_ADD },
+		{   IDS_KEYNAME_DIK_DECIMAL,    VK_DECIMAL },
+		{   IDS_KEYNAME_DIK_NUMPADENTER,VK_RETURN },
+		{   IDS_KEYNAME_DIK_DIVIDE,     VK_DIVIDE },
+
+		// Navigation Keys
+		{   IDS_KEYNAME_DIK_HOME,       VK_HOME },
+		{   IDS_KEYNAME_DIK_PRIOR,      VK_PRIOR },         // Page Up
+		{   IDS_KEYNAME_DIK_END,        VK_END },
+		{   IDS_KEYNAME_DIK_NEXT,       VK_NEXT },          // Page Down
+		{   IDS_KEYNAME_DIK_INSERT,     VK_INSERT },
+		{   IDS_KEYNAME_DIK_DELETE,     VK_DELETE },
+		{   IDS_KEYNAME_DIK_UP,         VK_UP },
+		{   IDS_KEYNAME_DIK_DOWN,       VK_DOWN },
+		{   IDS_KEYNAME_DIK_LEFT,       VK_LEFT },
+		{   IDS_KEYNAME_DIK_RIGHT,      VK_RIGHT },
+
+		// System Keys
+		{   IDS_KEYNAME_DIK_SYSRQ,      VK_SNAPSHOT },      // Print Screen/SysRq
+
+		// Modifier Keys
+		{   IDS_KEYNAME_DIK_CONTROL,    VK_CONTROL },
+		{   IDS_KEYNAME_DIK_LCONTROL,   VK_LCONTROL },
+		{   IDS_KEYNAME_DIK_RCONTROL,   VK_RCONTROL },
+		{   IDS_KEYNAME_DIK_SHIFT,      VK_SHIFT },
+		{   IDS_KEYNAME_DIK_LSHIFT,     VK_LSHIFT },
+		{   IDS_KEYNAME_DIK_RSHIFT,     VK_RSHIFT },
+		{   IDS_KEYNAME_DIK_ALT,        VK_MENU },          // VK_MENU is Alt
+		{   IDS_KEYNAME_DIK_LALT,       VK_LMENU },
+		{   IDS_KEYNAME_DIK_RALT,       VK_RMENU },
+		{   IDS_KEYNAME_DIK_WIN,        VK_LWIN },          // Generic Windows key
+		{   IDS_KEYNAME_DIK_LWIN,       VK_LWIN },
+		{   IDS_KEYNAME_DIK_RWIN,       VK_RWIN },
+		{   IDS_KEYNAME_DIK_APPS,       VK_APPS },
+
+		// Mouse Buttons
+		{   IDS_INPUT_LBUTTON,          DirectInput::BUTTON_MOUSE_LEFT },
+		{   IDS_INPUT_RBUTTON,          DirectInput::BUTTON_MOUSE_RIGHT },
+		{   IDS_INPUT_MBUTTON,          DirectInput::BUTTON_MOUSE_CENTER },
+
+		// Mouse Wheel
+		{   IDS_INPUT_MW_UP,            Input::SLIDER_MOUSE_WHEEL_FORWARD },
+		{   IDS_INPUT_MW_DN,            Input::SLIDER_MOUSE_WHEEL_BACKWARD },
+
+		// Gamepad Buttons
+		// {   0,                          GameInputGamepadA },
+		// {   0,                          GameInputGamepadB },
+
+		// Mouse Movement Sliders
+		{   0,                          Input::SLIDER_MOUSE_LEFT },
+		{   0,                          Input::SLIDER_MOUSE_RIGHT },
+		{   0,                          Input::SLIDER_MOUSE_UP },
+		{   0,                          Input::SLIDER_MOUSE_DOWN },
+
+		// Joystick/Gamepad Analog Sliders
+		{   0,                          Input::SLIDER_JOYSTICK_LEFT },
+		{   0,                          Input::SLIDER_JOYSTICK_RIGHT },
+		{   0,                          Input::SLIDER_JOYSTICK_UP },
+		{   0,                          Input::SLIDER_JOYSTICK_DOWN },
 };
 
 const int KEYNAME_MAP_COUNT	= sizeof (DIK_KEY_NAME_ARRAY) / sizeof (KEY_NAME_MAPPING);
