@@ -60,7 +60,7 @@ public:
 	typedef enum {
 		NUM_KEYBOARD_BUTTONS	= 256,
 		NUM_MOUSE_BUTTONS		= 3,
-		NUM_JOYSTICK_BUTTONS	= 2
+		NUM_CONTROLLER_BUTTONS	= 13
 	} ButtonCounts;
 
 	typedef enum {
@@ -73,6 +73,9 @@ public:
 	typedef enum {
 		JOYSTICK_X_AXIS,
 		JOYSTICK_Y_AXIS,
+		JOYSTICK_RX_AXIS,  // Right stick X
+		JOYSTICK_RY_AXIS,  // Right stick Y
+		NUM_JOYSTICK_AXIS
 	} JoystickAxis;
 
 	typedef enum {
@@ -83,19 +86,29 @@ public:
 
 	/*
 	** Buttons include all keyboard keys, plus the buttons
-	** on the mouse and joysticks
+	** on the mouse
 	*/
 	enum {
-		BUTTON_KEYBOARD_FIRST	= 0,
-		BUTTON_MOUSE_FIRST		= 256,
-		BUTTON_MOUSE_LEFT			= BUTTON_MOUSE_FIRST,
+		BUTTON_KEYBOARD_FIRST = 0,
+		BUTTON_MOUSE_FIRST = 256,
+		BUTTON_MOUSE_LEFT = BUTTON_MOUSE_FIRST,
 		BUTTON_MOUSE_RIGHT,
 		BUTTON_MOUSE_CENTER,
-		BUTTON_JOYSTICK_FIRST,
-		BUTTON_JOYSTICK_A			= BUTTON_JOYSTICK_FIRST,
-		BUTTON_JOYSTICK_B,
+		BUTTON_CONTROLLER_FIRST = BUTTON_MOUSE_FIRST + NUM_MOUSE_BUTTONS,
+		BUTTON_CONTROLLER_A = BUTTON_CONTROLLER_FIRST,
+		BUTTON_CONTROLLER_B,
+		BUTTON_CONTROLLER_X,
+		BUTTON_CONTROLLER_Y,
+		BUTTON_CONTROLLER_MENU,
+		BUTTON_CONTROLLER_MENU_SHARE,
+		BUTTON_CONTROLLER_MENU_VENDOR,
+		BUTTON_CONTROLLER_DPAD_UP,
+		BUTTON_CONTROLLER_DPAD_DOWN,
+		BUTTON_CONTROLLER_DPAD_LEFT,
+		BUTTON_CONTROLLER_DPAD_RIGHT, // 11
+		BUTTON_CONTROLLER_LEFT_TRIGGER,
+		BUTTON_CONTROLLER_RIGHT_TRIGGER,
 		BUTTON_MAX
-		//NUM_BUTTONS,
 	};
 
 	/*
@@ -154,8 +167,9 @@ private:
 	static	char						DIKeyboardButtons[NUM_KEYBOARD_BUTTONS];
 	static	char						DIMouseButtons[NUM_MOUSE_BUTTONS];
 	static	long						DIMouseAxis[NUM_MOUSE_AXIS];
-	static	char						DIJoystickButtons[NUM_MOUSE_BUTTONS];
+	static	char						DIJoystickButtons[NUM_CONTROLLER_BUTTONS];
 	static	float						ButtonLastHitTime[NUM_KEYBOARD_BUTTONS];
+	static  long						DIJoystickAxis[NUM_JOYSTICK_AXIS];
 
 	static	Vector3					CursorPos;
 	static	bool						EatMouseHeld;
@@ -180,12 +194,17 @@ DirectInput::Get_Button_Value (int button_id)
 {
 	char retval = 0;
 
-	if (button_id < BUTTON_MOUSE_FIRST) {
+	if (button_id >= BUTTON_KEYBOARD_FIRST && button_id < BUTTON_MOUSE_FIRST)
+	{
 		retval = DIKeyboardButtons[button_id];
-	} else if (button_id < BUTTON_JOYSTICK_FIRST) {
+	}
+	else if (button_id >= BUTTON_MOUSE_FIRST && button_id < BUTTON_CONTROLLER_FIRST)
+	{
 		retval = DIMouseButtons[button_id - BUTTON_MOUSE_FIRST];
-	} else if (button_id < BUTTON_MAX) {
-		retval = DIJoystickButtons[button_id - BUTTON_JOYSTICK_FIRST];
+	}
+	else if (button_id >= BUTTON_CONTROLLER_FIRST && button_id < BUTTON_CONTROLLER_FIRST + NUM_CONTROLLER_BUTTONS)
+	{
+		retval = DIJoystickButtons[button_id - BUTTON_CONTROLLER_FIRST];
 	}
 
 	return retval;

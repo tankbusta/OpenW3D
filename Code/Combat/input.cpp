@@ -68,6 +68,8 @@ float	MouseScale			= 1;
 bool	MouseInvert			= true;
 bool	Mouse2DInvert		= false;
 
+float	ControllerSensitivity = 5.0f;
+
 const char *DEFAULT_INPUT_FILENAME = "DEFAULT_INPUT.CFG";
 
 #define		BUTTON_BIT_HELD		DirectInput::DI_BUTTON_HELD
@@ -105,6 +107,8 @@ const char *DEFAULT_INPUT_FILENAME = "DEFAULT_INPUT.CFG";
 #define	ENTRY_MOUSE_INVERT			"MouseInvert"
 #define	ENTRY_MOUSE_2D_INVERT		"Mouse2DInvert"
 #define	ENTRY_TARGET_STEERING		"TargetSteering"
+
+#define ENTRY_CONTROLLER_SENSITIVITY	"ControllerSensitivity"
 
 typedef struct {
 	short	ID;
@@ -237,6 +241,19 @@ StringID ButtonNames[] = {
 	{ DirectInput::BUTTON_MOUSE_LEFT,     "Left_Mouse_Button"     },
 	{ DirectInput::BUTTON_MOUSE_RIGHT,    "Right_Mouse_Button"    },
 	{ DirectInput::BUTTON_MOUSE_CENTER,   "Center_Mouse_Button"   },
+
+	{ DirectInput::BUTTON_CONTROLLER_A,   "Cont_A_Button" },
+	{ DirectInput::BUTTON_CONTROLLER_B,	  "Cont_B_Button" },
+	{ DirectInput::BUTTON_CONTROLLER_X,	  "Cont_X_Button" },
+	{ DirectInput::BUTTON_CONTROLLER_Y,	  "Cont_Y_Button" },
+
+	{ DirectInput::BUTTON_CONTROLLER_DPAD_UP,		"Cont_DPad_Up" },
+	{ DirectInput::BUTTON_CONTROLLER_DPAD_DOWN,		"Cont_DPad_Down" },
+	{ DirectInput::BUTTON_CONTROLLER_DPAD_LEFT,		"Cont_DPad_Left" },
+	{ DirectInput::BUTTON_CONTROLLER_DPAD_RIGHT,	"Cont_DPad_Right" },
+
+	{ DirectInput::BUTTON_CONTROLLER_LEFT_TRIGGER,	  "Cont_L_Trigger" },
+	{ DirectInput::BUTTON_CONTROLLER_RIGHT_TRIGGER,	  "Cont_R_Trigger" },
 };
 
 #define	NUM_BUTTON_NAMES	( sizeof(ButtonNames) / sizeof(ButtonNames[0]) )
@@ -256,13 +273,6 @@ StringID	SliderNames[] = {
 };
 
 #define	NUM_SLIDER_NAMES	( sizeof( SliderNames ) / sizeof( SliderNames[0] ) )
-
-StringID GamepadButtonNames[] = {
-	{ GameInputGamepadA,      "Joystick_Button_A"     },
-	{ GameInputGamepadB,      "Joystick_Button_B"     },
-};
-
-#define	NUM_GAMEPAD_BUTTON_NAMES	( sizeof( GamepadButtonNames ) / sizeof( GamepadButtonNames[0] ) )
 
 #define	NUM_FUNCTIONS	INPUT_FUNCTION_COUNT
 
@@ -647,6 +657,7 @@ float	Input::FunctionValue[ INPUT_FUNCTION_COUNT ];
 float	Input::FunctionClamp[ INPUT_FUNCTION_COUNT ];
 int	Input::FunctionPrimaryKeys[ INPUT_FUNCTION_COUNT ];
 int	Input::FunctionSecondaryKeys[ INPUT_FUNCTION_COUNT ];
+int	Input::FunctionControllerKeys[INPUT_FUNCTION_COUNT];
 bool	Input::DamageIndicatorsEnabled = true;
 bool	Input::UsingDirectInput = true;
 
@@ -701,8 +712,9 @@ void	Input::Free_Mappings( void )
 	//
 	//	Simply reset the key arrays
 	//
-	::memset (FunctionPrimaryKeys, 0, sizeof (FunctionPrimaryKeys));
-	::memset (FunctionSecondaryKeys, 0, sizeof (FunctionSecondaryKeys));
+	::memset(FunctionPrimaryKeys, 0, sizeof (FunctionPrimaryKeys));
+	::memset(FunctionSecondaryKeys, 0, sizeof (FunctionSecondaryKeys));
+	::memset(FunctionControllerKeys, 0, sizeof(FunctionControllerKeys));
 
 	//
 	//	Free the accelerated key list
@@ -802,9 +814,9 @@ void	Input::Update_Sliders( void )
 	//
 	//	Update mouse sliders
 	//
-	float	mouse_x = MouseScale * (float)(DirectInput::Get_Mouse_Axis( DirectInput::MOUSE_X_AXIS ));
-	float	mouse_y = MouseScale * (float)(DirectInput::Get_Mouse_Axis( DirectInput::MOUSE_Y_AXIS ));
-	float	mouse_z = wheel_scale * (float)(DirectInput::Get_Mouse_Axis( DirectInput::MOUSE_Z_AXIS ));
+	float	mouse_x = MouseScale * (float)(DirectInput::Get_Mouse_Axis(DirectInput::MOUSE_X_AXIS));
+	float	mouse_y = MouseScale * (float)(DirectInput::Get_Mouse_Axis(DirectInput::MOUSE_Y_AXIS));
+	float	mouse_z = wheel_scale * (float)(DirectInput::Get_Mouse_Axis(DirectInput::MOUSE_Z_AXIS));
 
 	if (TimeManager::Get_Frame_Real_Seconds() > 0.0f) {
 		mouse_x /= TimeManager::Get_Frame_Real_Seconds();
@@ -823,33 +835,41 @@ void	Input::Update_Sliders( void )
 		mouse_y = -mouse_y;
 	}
 
-//	Debug_Say(( "Mouse %f %f\n", mouse_x, mouse_y ));
+	// Get right stick camera input
+	float	joystick_rx = (float)DirectInput::Get_Joystick_Axis_State(DirectInput::JOYSTICK_RX_AXIS) / 1000.0f;
+	float	joystick_ry = (float)DirectInput::Get_Joystick_Axis_State(DirectInput::JOYSTICK_RY_AXIS) / 1000.0f;
 
-	Sliders[ SLIDER_MOUSE_LEFT - FIRST_SLIDER ]				= MAX( -mouse_x , 0.0f );
-	Sliders[ SLIDER_MOUSE_RIGHT - FIRST_SLIDER ]				= MAX(  mouse_x , 0.0f );
-	Sliders[ SLIDER_MOUSE_UP - FIRST_SLIDER ]					= MAX( -mouse_y , 0.0f );
-	Sliders[ SLIDER_MOUSE_DOWN - FIRST_SLIDER ]				= MAX(  mouse_y , 0.0f );
-	Sliders[ SLIDER_MOUSE_WHEEL_FORWARD - FIRST_SLIDER ]	= MAX( -mouse_z , 0.0f );
-	Sliders[ SLIDER_MOUSE_WHEEL_BACKWARD - FIRST_SLIDER ]	= MAX(  mouse_z , 0.0f );
-
-	//
-	// Update joystick sliders
-	//
-	float	joystick_x = (float)DirectInput::Get_Joystick_Axis_State( DirectInput::JOYSTICK_X_AXIS ) / 1000.0f;
-	float	joystick_y = (float)DirectInput::Get_Joystick_Axis_State( DirectInput::JOYSTICK_Y_AXIS ) / 1000.0f;
-
-	const float DEAD_ZONE = 0.15f;
-	if (WWMath::Fabs(joystick_x) < DEAD_ZONE) {
-		joystick_x = 0.0f;
+	const float CAMERA_DEAD_ZONE = 0.15f;
+	if (WWMath::Fabs(joystick_rx) < CAMERA_DEAD_ZONE) {
+		joystick_rx = 0.0f;
 	} else {
-		joystick_x = WWMath::Sign(joystick_x) * (WWMath::Fabs(joystick_x) - DEAD_ZONE) * 1.5f / (1.0f - DEAD_ZONE);
+		joystick_rx = WWMath::Sign(joystick_rx) * (WWMath::Fabs(joystick_rx) - CAMERA_DEAD_ZONE) / (1.0f - CAMERA_DEAD_ZONE);
 	}
 
-	Sliders[ SLIDER_JOYSTICK_LEFT - FIRST_SLIDER ]	= MAX( -joystick_x , 0.0f );
-	Sliders[ SLIDER_JOYSTICK_RIGHT - FIRST_SLIDER ]	= MAX(  joystick_x , 0.0f );
-	Sliders[ SLIDER_JOYSTICK_UP - FIRST_SLIDER ]	= MAX( -joystick_y , 0.0f );
-	Sliders[ SLIDER_JOYSTICK_DOWN - FIRST_SLIDER ]	= MAX(  joystick_y , 0.0f );
-	return ;
+	if (WWMath::Fabs(joystick_ry) < CAMERA_DEAD_ZONE) {
+		joystick_ry = 0.0f;
+	} else {
+		joystick_ry = WWMath::Sign(joystick_ry) * (WWMath::Fabs(joystick_ry) - CAMERA_DEAD_ZONE) / (1.0f - CAMERA_DEAD_ZONE);
+	}
+
+	float camera_x = joystick_rx * ControllerSensitivity;
+	float camera_y = joystick_ry * ControllerSensitivity;
+
+	if (!MouseInvert) {
+		camera_y = -camera_y;
+	}
+
+	// Combine mouse and right stick for camera control
+	mouse_x += camera_x;
+	mouse_y += camera_y;
+
+	Sliders[SLIDER_MOUSE_LEFT - FIRST_SLIDER] = MAX(-mouse_x, 0.0f);
+	Sliders[SLIDER_MOUSE_RIGHT - FIRST_SLIDER] = MAX(mouse_x, 0.0f);
+	Sliders[SLIDER_MOUSE_UP - FIRST_SLIDER] = MAX(-mouse_y, 0.0f);
+	Sliders[SLIDER_MOUSE_DOWN - FIRST_SLIDER] = MAX(mouse_y, 0.0f);
+	Sliders[SLIDER_MOUSE_WHEEL_FORWARD - FIRST_SLIDER] = MAX(-mouse_z, 0.0f);
+	Sliders[SLIDER_MOUSE_WHEEL_BACKWARD - FIRST_SLIDER] = MAX(mouse_z, 0.0f);
+	return;
 }
 
 
@@ -891,20 +911,22 @@ void	Input::Update( void )
 
 			float value1 = Get_Value (index, FunctionPrimaryKeys[index], 1.0F);
 			float value2 = Get_Value (index, FunctionSecondaryKeys[index], 1.0F);
+			float value3 = Get_Value(index, FunctionControllerKeys[index], 1.0F);
 
 			//
 			//	Special case the enter key.  If the enter key isn't hit, then
 			// check for the num-pad enter key
 			//
-			if (value1 == 0.0F && value2 == 0.0F) {
-				if (	FunctionPrimaryKeys[index] == VK_RETURN ||
-						FunctionSecondaryKeys[index] == VK_RETURN)
+			if (value1 == 0.0F && value2 == 0.0F && value3 == 0.0F) {
+				if (FunctionPrimaryKeys[index] == VK_RETURN ||
+					FunctionSecondaryKeys[index] == VK_RETURN ||
+					FunctionControllerKeys[index] == VK_RETURN)
 				{
-					value1 = Get_Value (index, VK_RETURN, 1.0F);
+					value1 = Get_Value(index, VK_RETURN, 1.0F);
 				}
 			}
 
-			FunctionValue[index] = max (value1, value2);
+			FunctionValue[index] = max(max(value1, value2), value3);
 		}
 
 		_StatsHelpScreen += Get_State( INPUT_FUNCTION_HELP_SCREEN ) ? 1 : 0;
@@ -1271,11 +1293,15 @@ Input::Save_Configuration (const char *filename)
 	for (int index = 0; index < NUM_FUNCTIONS; index ++) {
 		StringClass pri_name;
 		StringClass sec_name;
-		pri_name.Format ("%s_Primary",	Functions[index].Name);
+		StringClass cont_name;
+
+		pri_name.Format ("%s_Primary",		Functions[index].Name);
 		sec_name.Format ("%s_Secondary",	Functions[index].Name);
+		cont_name.Format("%s_Controller",	Functions[index].Name);
 
 		StringClass pri_key;
 		StringClass sec_key;
+		StringClass cont_key;
 
 		//
 		//	Get the name of the primary key that's mapped to this function
@@ -1292,10 +1318,18 @@ Input::Save_Configuration (const char *filename)
 		}
 
 		//
+		//	Get the name of the controller keys that's mapped to this function
+		//
+		if (FunctionControllerKeys[index] != 0) {
+			cont_key = Get_Key_Name(FunctionControllerKeys[index]);
+		}
+
+		//
 		//	Read the primary and secondary keys for this function
 		//
 		input_ini.Put_String ("Generic Key Mappings", pri_name, pri_key);
 		input_ini.Put_String ("Generic Key Mappings", sec_name, sec_key);
+		input_ini.Put_String ("Generic Key Mappings", cont_name, cont_key);
 	}
 
 	//
@@ -1464,10 +1498,6 @@ const KEY_NAME_MAPPING DIK_KEY_NAME_ARRAY[] =
 		{   IDS_INPUT_MW_UP,            Input::SLIDER_MOUSE_WHEEL_FORWARD },
 		{   IDS_INPUT_MW_DN,            Input::SLIDER_MOUSE_WHEEL_BACKWARD },
 
-		// Gamepad Buttons
-		// {   0,                          GameInputGamepadA },
-		// {   0,                          GameInputGamepadB },
-
 		// Mouse Movement Sliders
 		{   0,                          Input::SLIDER_MOUSE_LEFT },
 		{   0,                          Input::SLIDER_MOUSE_RIGHT },
@@ -1487,68 +1517,76 @@ const int KEYNAME_MAP_COUNT	= sizeof (DIK_KEY_NAME_ARRAY) / sizeof (KEY_NAME_MAP
 /*
 **
 */
-void
-Input::Load_Configuration (const char *filename)
+void Input::Load_Configuration(const char* filename)
 {
-	Free_Mappings ();
+	Free_Mappings();
 
 	//
 	//	Try to load the INI file
 	//
-	INIClass	*input_ini = Get_INI (filename);
+	INIClass* input_ini = Get_INI(filename);
 	if (input_ini == NULL) {
 		Debug_Say(("Input::Load_Configuration - Unable to load %s\n", filename));
-		return ;
+		return;
 	}
 
 	//
 	//	Loop over each function and try to read data about it from the INI
 	//
-	for (int index = 0; index < NUM_FUNCTIONS; index ++) {
+	for (int index = 0; index < NUM_FUNCTIONS; index++) {
 		StringClass pri_name;
 		StringClass sec_name;
-		pri_name.Format ("%s_Primary",	Functions[index].Name);
-		sec_name.Format ("%s_Secondary",	Functions[index].Name);
+		StringClass cont_name;
+		pri_name.Format("%s_Primary", Functions[index].Name);
+		sec_name.Format("%s_Secondary", Functions[index].Name);
+		cont_name.Format("%s_Controller", Functions[index].Name);
 
 		//
 		//	Read the primary and secondary keys for this function
 		//
-		StringClass pri_key(0,true);
-		input_ini->Get_String (pri_key,"Generic Key Mappings", pri_name);
-		StringClass sec_key(0,true);
-		input_ini->Get_String (sec_key,"Generic Key Mappings", sec_name);
+		StringClass pri_key(0, true);
+		input_ini->Get_String(pri_key, "Generic Key Mappings", pri_name);
+		StringClass sec_key(0, true);
+		input_ini->Get_String(sec_key, "Generic Key Mappings", sec_name);
+		StringClass cont_key(0, true);
+		input_ini->Get_String(cont_key, "Generic Key Mappings", cont_name);
 
 		//
 		//	Set the primary key for this function
 		//
-		if (pri_key.Is_Empty () == false) {
-			FunctionPrimaryKeys[index] = Get_Key (pri_key);
+		if (pri_key.Is_Empty() == false) {
+			FunctionPrimaryKeys[index] = Get_Key(pri_key);
 		}
 
 		//
 		//	Set the secondary key for this function
 		//
-		if (pri_key.Is_Empty () == false) {
-			FunctionSecondaryKeys[index] = Get_Key (sec_key);
+		if (sec_key.Is_Empty() == false) {
+			FunctionSecondaryKeys[index] = Get_Key(sec_key);
+		}
+
+		//
+		//	Set the controller key for this function
+		//
+		if (cont_key.Is_Empty() == false) {
+			FunctionControllerKeys[index] = Get_Key(cont_key);
 		}
 	}
 
 	//
 	//	Load the accelerated keys from the ini
 	//
-	Load_Accelerated_Keys (input_ini);
-	Load_Misc_Settings (input_ini);
-
+	Load_Accelerated_Keys(input_ini);
+	Load_Misc_Settings(input_ini);
 	//
 	//	Free the INI
 	//
-	Release_INI (input_ini);
-
+	Release_INI(input_ini);
 	//
 	//	Reset the mouse sensitivity to ensure its clamped properly
 	//
-	Input::Set_Mouse_Sensitivity (MouseSensitivity);
-	return ;
+	Input::Set_Mouse_Sensitivity(MouseSensitivity);
+	return;
 }
 
 
@@ -1668,6 +1706,8 @@ Input::Load_Misc_Settings (INIClass *input_ini)
 	MouseInvert					= input_ini->Get_Bool (SECTION_MISC_SETTINGS, ENTRY_MOUSE_INVERT, true);
 	Mouse2DInvert				= input_ini->Get_Bool (SECTION_MISC_SETTINGS, ENTRY_MOUSE_2D_INVERT, false);
 
+	ControllerSensitivity		= input_ini->Get_Float(SECTION_MISC_SETTINGS, ENTRY_CONTROLLER_SENSITIVITY, 5.0F);
+
 	bool is_target_steering	= input_ini->Get_Bool (SECTION_MISC_SETTINGS, ENTRY_TARGET_STEERING, false);
 	VehicleGameObj::Set_Target_Steering (is_target_steering);
 
@@ -1745,6 +1785,69 @@ Input::Find_Next_Function_By_Secondary_Key (int function_id, int key_id)
 
 	for (int index = (function_id + 1); index < INPUT_FUNCTION_COUNT; index ++) {
 		if (FunctionSecondaryKeys[index] == key_id) {
+			retval = index;
+			break;
+		}
+	}
+
+	return retval;
+}
+
+/*
+**
+*/
+int
+Input::Get_Controller_Key_For_Function(int function_id)
+{
+	return FunctionControllerKeys[function_id];
+}
+
+
+/*
+**
+*/
+void
+Input::Set_Controller_Key_For_Function(int function_id, int key_id)
+{
+	FunctionControllerKeys[function_id] = key_id;
+
+	// Use weapon key is the same as secondary fire, just hit rather than held
+	if (function_id == INPUT_FUNCTION_FIRE_WEAPON_SECONDARY) {
+		Set_Controller_Key_For_Function(INPUT_FUNCTION_USE_WEAPON, key_id);
+	}
+
+	// Copy jump and crouch to move up and down
+	if (function_id == INPUT_FUNCTION_CROUCH) {
+		Set_Controller_Key_For_Function(INPUT_FUNCTION_MOVE_DOWN, key_id);
+	}
+	if (function_id == INPUT_FUNCTION_JUMP) {
+		Set_Controller_Key_For_Function(INPUT_FUNCTION_MOVE_UP, key_id);
+	}
+
+	return;
+}
+
+
+/*
+**
+*/
+int
+Input::Find_First_Function_By_Controller_Key(int key_id)
+{
+	return Find_Next_Function_By_Controller_Key(-1, key_id);
+}
+
+
+/*
+**
+*/
+int
+Input::Find_Next_Function_By_Controller_Key(int function_id, int key_id)
+{
+	int retval = -1;
+
+	for (int index = (function_id + 1); index < INPUT_FUNCTION_COUNT; index++) {
+		if (FunctionControllerKeys[index] == key_id) {
 			retval = index;
 			break;
 		}

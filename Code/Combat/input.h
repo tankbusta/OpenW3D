@@ -321,8 +321,8 @@ public:
 	//
 	// Configuration editing support
 	//
-	static	int	Get_Primary_Key_For_Function (int function_id);
-	static	int	Get_Secondary_Key_For_Function (int function_id);
+	static	int		Get_Primary_Key_For_Function (int function_id);
+	static	int		Get_Secondary_Key_For_Function (int function_id);
 	static	void	Set_Primary_Key_For_Function (int function_id, int key_id);
 	static	void	Set_Secondary_Key_For_Function (int function_id, int key_id);
 
@@ -340,6 +340,14 @@ public:
 	//
 	static	void	Enable_Damage_Indicators (bool onoff)		{ DamageIndicatorsEnabled = onoff; }
 	static	bool	Are_Damage_Indicators_Enabled (void)		{ return DamageIndicatorsEnabled; }
+
+	//
+	// Controller Support
+	//
+	static  int     Get_Controller_Key_For_Function(int function_id);
+	static	void	Set_Controller_Key_For_Function(int function_id, int key_id);
+	static	int		Find_First_Function_By_Controller_Key(int key_id);
+	static	int		Find_Next_Function_By_Controller_Key(int function_id, int key_id);
 
 private:
 
@@ -364,8 +372,9 @@ private:
 	static	float	FunctionValue[ INPUT_FUNCTION_COUNT ];
 	static	float	FunctionClamp[ INPUT_FUNCTION_COUNT ];
 
-	static	int	FunctionPrimaryKeys[ INPUT_FUNCTION_COUNT ];
-	static	int	FunctionSecondaryKeys[ INPUT_FUNCTION_COUNT ];
+	static	int	FunctionPrimaryKeys[INPUT_FUNCTION_COUNT];
+	static	int	FunctionSecondaryKeys[INPUT_FUNCTION_COUNT];
+	static  int FunctionControllerKeys[INPUT_FUNCTION_COUNT];
 
 	static	bool	UsingDirectInput;
 

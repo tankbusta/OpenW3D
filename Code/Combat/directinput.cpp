@@ -53,23 +53,42 @@ GameInputMouseState				PreviousMouseState = {};
 char						DirectInput::DIKeyboardButtons[NUM_KEYBOARD_BUTTONS];
 char						DirectInput::DIMouseButtons[NUM_MOUSE_BUTTONS];
 long						DirectInput::DIMouseAxis[NUM_MOUSE_AXIS];
-char						DirectInput::DIJoystickButtons[NUM_MOUSE_BUTTONS];
+char						DirectInput::DIJoystickButtons[NUM_CONTROLLER_BUTTONS];
 float						DirectInput::ButtonLastHitTime[NUM_KEYBOARD_BUTTONS];
+long						DirectInput::DIJoystickAxis[NUM_JOYSTICK_AXIS];
 Vector3						DirectInput::CursorPos(0, 0, 0);
 bool						DirectInput::EatMouseHeld = false;
 bool						DirectInput::Captured = false;
 void*						DirectInput::DirectInputLibrary = NULL;
 int							DirectInput::LastKeyPressed = 0;
 
-// Temp State Table (only for joystick currently)
-char	Button_State_Table[4] = { 0,
-								DirectInput::DI_BUTTON_HIT | DirectInput::DI_BUTTON_HELD,
-								DirectInput::DI_BUTTON_RELEASED,
-								DirectInput::DI_BUTTON_HELD };
 
-#define		BUTTON_BIT_DOUBLE				8
+struct ButtonMapping {
+	int index;
+	GameInputGamepadButtons mask;
+};
+
+ButtonMapping buttons[] = {
+	{ DirectInput::BUTTON_CONTROLLER_A - DirectInput::BUTTON_CONTROLLER_FIRST, GameInputGamepadA },
+	{ DirectInput::BUTTON_CONTROLLER_B - DirectInput::BUTTON_CONTROLLER_FIRST, GameInputGamepadB },
+	{ DirectInput::BUTTON_CONTROLLER_X - DirectInput::BUTTON_CONTROLLER_FIRST, GameInputGamepadX },
+	{ DirectInput::BUTTON_CONTROLLER_Y - DirectInput::BUTTON_CONTROLLER_FIRST, GameInputGamepadY },
+	{ DirectInput::BUTTON_CONTROLLER_MENU - DirectInput::BUTTON_CONTROLLER_FIRST, GameInputGamepadMenu },
+
+	{ DirectInput::BUTTON_CONTROLLER_DPAD_UP - DirectInput::BUTTON_CONTROLLER_FIRST, GameInputGamepadDPadUp },
+	{ DirectInput::BUTTON_CONTROLLER_DPAD_DOWN - DirectInput::BUTTON_CONTROLLER_FIRST, GameInputGamepadDPadDown },
+	{ DirectInput::BUTTON_CONTROLLER_DPAD_LEFT - DirectInput::BUTTON_CONTROLLER_FIRST, GameInputGamepadDPadLeft },
+	{ DirectInput::BUTTON_CONTROLLER_DPAD_RIGHT - DirectInput::BUTTON_CONTROLLER_FIRST, GameInputGamepadDPadRight },
+};
+
+#define		LEFT_TRIGGER_OFFSET			DirectInput::BUTTON_CONTROLLER_RIGHT_TRIGGER - DirectInput::BUTTON_CONTROLLER_FIRST
+#define		RIGHT_TRIGGER_OFFSET		DirectInput::BUTTON_CONTROLLER_RIGHT_TRIGGER - DirectInput::BUTTON_CONTROLLER_FIRST
+
+#define		BUTTON_BIT_DOUBLE			8
 #define		BUTTON_DOUBLE_THRESHHOLD	0.25f
-
+#define		TRIGGER_THRESHOLD			0.5f
+#define		DEADZONE					0.15f
+#define		AXIS_SCALE					1000.0f
 
 /*
 **
@@ -126,6 +145,7 @@ void DirectInput::Flush(void)
 	memset(DIJoystickButtons, 0, sizeof(DIJoystickButtons));
 	memset(PreviousKeyState, 0, sizeof(PreviousKeyState));
 	memset(&PreviousMouseState, 0, sizeof(PreviousMouseState));
+	memset(&DIJoystickAxis, 0, sizeof(DIJoystickAxis));
 }
 
 /*
@@ -263,11 +283,13 @@ void DirectInput::ReadMouse(void)
 	if (!GIObject) return;
 
 	// Clear previous frame data
-	for (int i = 0; i < sizeof(DIMouseButtons); i++) {
+	for (int i = 0; i < sizeof(DIMouseButtons); i++)
+	{
 		DIMouseButtons[i] &= DI_BUTTON_HELD;
 	}
 
-	for (int i = 0; i < (sizeof(DIMouseAxis) / sizeof(DIMouseAxis[0])); i++) {
+	for (int i = 0; i < (sizeof(DIMouseAxis) / sizeof(DIMouseAxis[0])); i++)
+	{
 		DIMouseAxis[i] = 0;
 	}
 
@@ -298,16 +320,19 @@ void DirectInput::ReadMouse(void)
 				bool wasPressed = (PreviousMouseState.buttons & buttonBit) != 0;
 				bool isPressed = (mouseState.buttons & buttonBit) != 0;
 
-				if (!wasPressed && isPressed) {
+				if (!wasPressed && isPressed)
+				{
 					DIMouseButtons[i] |= DI_BUTTON_HIT;
 					DIMouseButtons[i] |= DI_BUTTON_HELD;
 				}
-				else if (wasPressed && !isPressed) {
+				else if (wasPressed && !isPressed)
+				{
 					DIMouseButtons[i] |= DI_BUTTON_RELEASED;
 					DIMouseButtons[i] &= ~DI_BUTTON_HELD;
 					if (i == 0) EatMouseHeld = false;
 				}
-				else if (isPressed) {
+				else if (isPressed)
+				{
 					// Keep HELD state, don't set HIT again
 					DIMouseButtons[i] |= DI_BUTTON_HELD;
 				}
@@ -324,6 +349,7 @@ void DirectInput::ReadMouse(void)
 		DIMouseButtons[BUTTON_MOUSE_LEFT & 0xFF] &= ~DI_BUTTON_HIT;
 		DIMouseButtons[BUTTON_MOUSE_LEFT & 0xFF] |= DI_BUTTON_RELEASED;
 	}
+
 }
 
 
@@ -333,7 +359,133 @@ void DirectInput::ReadMouse(void)
 void DirectInput::ReadJoystick(void)
 {
 	if (!GIObject) return;
-	// TODO: Need to get a better system in-place
+
+	// Clear previous frame flags
+	for (int i = 0; i < NUM_CONTROLLER_BUTTONS; i++) {
+		DIJoystickButtons[i] &= DI_BUTTON_HELD;
+	}
+
+	IGameInputReading* reading = nullptr;
+	HRESULT hr = GIObject->GetCurrentReading(GameInputKindGamepad, nullptr, &reading);
+	if (FAILED(hr) || !reading) {
+		// No gamepad reading, release all
+		for (int i = 0; i < NUM_CONTROLLER_BUTTONS; i++)
+		{
+			if (DIJoystickButtons[i] & DI_BUTTON_HELD) {
+				DIJoystickButtons[i] |= DI_BUTTON_RELEASED;
+				DIJoystickButtons[i] &= ~DI_BUTTON_HELD;
+			}
+		}
+
+		return;
+	}
+
+	GameInputGamepadState state;
+	if (!reading->GetGamepadState(&state)) {
+		// Failed to get state, release all
+		for (int i = 0; i < NUM_CONTROLLER_BUTTONS; i++)
+		{
+			if (DIJoystickButtons[i] & DI_BUTTON_HELD)
+			{
+				DIJoystickButtons[i] |= DI_BUTTON_RELEASED;
+				DIJoystickButtons[i] &= ~DI_BUTTON_HELD;
+			}
+		}
+
+		return;
+	}
+
+	for (int i = 0; i < sizeof(buttons) / sizeof(buttons[0]); i++)
+	{
+		int idx = buttons[i].index;
+		bool isPressed = (state.buttons & buttons[i].mask) != 0;
+		bool wasPressed = (DIJoystickButtons[idx] & DI_BUTTON_HELD) != 0;
+
+		if (isPressed) {
+			if (!wasPressed)
+			{
+				DIJoystickButtons[idx] |= DI_BUTTON_HIT;
+				DIJoystickButtons[idx] |= DI_BUTTON_HELD;
+			}
+			else
+			{
+				// Button still held
+				DIJoystickButtons[idx] |= DI_BUTTON_HELD;
+			}
+		}
+		else
+		{
+			if (wasPressed)
+			{
+				// Button just released
+				DIJoystickButtons[idx] |= DI_BUTTON_RELEASED;
+				DIJoystickButtons[idx] &= ~DI_BUTTON_HELD;
+			}
+		}
+	}
+
+	// Left Trigger
+	bool leftTriggerPressed = state.leftTrigger > TRIGGER_THRESHOLD;
+	bool leftTriggerWasPressed = (DIJoystickButtons[LEFT_TRIGGER_OFFSET] & DI_BUTTON_HELD) != 0;
+
+	if (leftTriggerPressed)
+	{
+		if (!leftTriggerWasPressed)
+		{
+			DIJoystickButtons[LEFT_TRIGGER_OFFSET] |= DI_BUTTON_HIT;
+			DIJoystickButtons[LEFT_TRIGGER_OFFSET] |= DI_BUTTON_HELD;
+		}
+		else
+		{
+			DIJoystickButtons[LEFT_TRIGGER_OFFSET] |= DI_BUTTON_HELD;
+		}
+	}
+	else 
+	{
+		if (leftTriggerWasPressed)
+		{
+			DIJoystickButtons[LEFT_TRIGGER_OFFSET] |= DI_BUTTON_RELEASED;
+			DIJoystickButtons[LEFT_TRIGGER_OFFSET] &= ~DI_BUTTON_HELD;
+		}
+	}
+
+	// Right Trigger
+	bool rightTriggerPressed = state.rightTrigger > TRIGGER_THRESHOLD;
+	bool rightTriggerWasPressed = (DIJoystickButtons[RIGHT_TRIGGER_OFFSET] & DI_BUTTON_HELD) != 0;
+
+	if (rightTriggerPressed)
+	{
+		if (!rightTriggerWasPressed)
+		{
+			DIJoystickButtons[RIGHT_TRIGGER_OFFSET] |= DI_BUTTON_HIT;
+			DIJoystickButtons[RIGHT_TRIGGER_OFFSET] |= DI_BUTTON_HELD;
+		}
+		else
+		{
+			DIJoystickButtons[RIGHT_TRIGGER_OFFSET] |= DI_BUTTON_HELD;
+		}
+	}
+	else
+	{
+		if (rightTriggerWasPressed)
+		{
+			DIJoystickButtons[RIGHT_TRIGGER_OFFSET] |= DI_BUTTON_RELEASED;
+			DIJoystickButtons[RIGHT_TRIGGER_OFFSET] &= ~DI_BUTTON_HELD;
+		}
+	}
+
+	// Analog Sticks
+	float leftX = state.leftThumbstickX;
+	float leftY = state.leftThumbstickY;
+
+	DIJoystickAxis[JOYSTICK_X_AXIS] = (long)(leftX * AXIS_SCALE);
+	DIJoystickAxis[JOYSTICK_Y_AXIS] = (long)(leftY * AXIS_SCALE);
+
+	float rightX = state.rightThumbstickX;
+	float rightY = -state.rightThumbstickY;  // Invert Y axis for camera
+
+	DIJoystickAxis[JOYSTICK_RX_AXIS] = (long)(rightX * AXIS_SCALE);
+	DIJoystickAxis[JOYSTICK_RY_AXIS] = (long)(rightY * AXIS_SCALE);
 }
 
 /*
@@ -371,6 +523,9 @@ void DirectInput::Eat_Mouse_Held_States (void)
 */
 long	DirectInput::Get_Joystick_Axis_State( JoystickAxis axis )
 {
+	if (axis >= 0 && axis < NUM_JOYSTICK_AXIS)
+		return DIJoystickAxis[axis];
+
 	return 0;
 }
 
