@@ -59,7 +59,6 @@ long						DirectInput::DIJoystickAxis[NUM_JOYSTICK_AXIS];
 Vector3						DirectInput::CursorPos(0, 0, 0);
 bool						DirectInput::EatMouseHeld = false;
 bool						DirectInput::Captured = false;
-void*						DirectInput::DirectInputLibrary = NULL;
 int							DirectInput::LastKeyPressed = 0;
 
 
@@ -83,12 +82,34 @@ ButtonMapping buttons[] = {
 
 #define		LEFT_TRIGGER_OFFSET			DirectInput::BUTTON_CONTROLLER_RIGHT_TRIGGER - DirectInput::BUTTON_CONTROLLER_FIRST
 #define		RIGHT_TRIGGER_OFFSET		DirectInput::BUTTON_CONTROLLER_RIGHT_TRIGGER - DirectInput::BUTTON_CONTROLLER_FIRST
+#define		LSTICK_UP_OFFSET			DirectInput::BUTTON_CONTROLLER_LSTICK_UP - DirectInput::BUTTON_CONTROLLER_FIRST
+#define		LSTICK_DOWN_OFFSET			DirectInput::BUTTON_CONTROLLER_LSTICK_DOWN - DirectInput::BUTTON_CONTROLLER_FIRST
+#define		LSTICK_LEFT_OFFSET			DirectInput::BUTTON_CONTROLLER_LSTICK_LEFT - DirectInput::BUTTON_CONTROLLER_FIRST
+#define		LSTICK_RIGHT_OFFSET			DirectInput::BUTTON_CONTROLLER_LSTICK_RIGHT - DirectInput::BUTTON_CONTROLLER_FIRST
 
 #define		BUTTON_BIT_DOUBLE			8
 #define		BUTTON_DOUBLE_THRESHHOLD	0.25f
 #define		TRIGGER_THRESHOLD			0.5f
-#define		DEADZONE					0.15f
+#define		STICK_THRESHOLD				0.3f
 #define		AXIS_SCALE					1000.0f
+
+#define UPDATE_BUTTON_STATE(table, idx, isPressed) \
+	do { \
+		bool wasPressed = (table[idx] & DI_BUTTON_HELD) != 0; \
+		if (isPressed) { \
+			if (!wasPressed) { \
+				table[idx] |= DI_BUTTON_HIT; \
+				table[idx] |= DI_BUTTON_HELD; \
+			} else { \
+				table[idx] |= DI_BUTTON_HELD; \
+			} \
+		} else { \
+			if (wasPressed) { \
+				table[idx] |= DI_BUTTON_RELEASED; \
+				table[idx] &= ~DI_BUTTON_HELD; \
+			} \
+		} \
+	} while(0)
 
 /*
 **
@@ -397,82 +418,12 @@ void DirectInput::ReadJoystick(void)
 
 	for (int i = 0; i < sizeof(buttons) / sizeof(buttons[0]); i++)
 	{
-		int idx = buttons[i].index;
-		bool isPressed = (state.buttons & buttons[i].mask) != 0;
-		bool wasPressed = (DIJoystickButtons[idx] & DI_BUTTON_HELD) != 0;
-
-		if (isPressed) {
-			if (!wasPressed)
-			{
-				DIJoystickButtons[idx] |= DI_BUTTON_HIT;
-				DIJoystickButtons[idx] |= DI_BUTTON_HELD;
-			}
-			else
-			{
-				// Button still held
-				DIJoystickButtons[idx] |= DI_BUTTON_HELD;
-			}
-		}
-		else
-		{
-			if (wasPressed)
-			{
-				// Button just released
-				DIJoystickButtons[idx] |= DI_BUTTON_RELEASED;
-				DIJoystickButtons[idx] &= ~DI_BUTTON_HELD;
-			}
-		}
+		UPDATE_BUTTON_STATE(DIJoystickButtons, buttons[i].index, (state.buttons & buttons[i].mask) != 0);
 	}
 
-	// Left Trigger
-	bool leftTriggerPressed = state.leftTrigger > TRIGGER_THRESHOLD;
-	bool leftTriggerWasPressed = (DIJoystickButtons[LEFT_TRIGGER_OFFSET] & DI_BUTTON_HELD) != 0;
-
-	if (leftTriggerPressed)
-	{
-		if (!leftTriggerWasPressed)
-		{
-			DIJoystickButtons[LEFT_TRIGGER_OFFSET] |= DI_BUTTON_HIT;
-			DIJoystickButtons[LEFT_TRIGGER_OFFSET] |= DI_BUTTON_HELD;
-		}
-		else
-		{
-			DIJoystickButtons[LEFT_TRIGGER_OFFSET] |= DI_BUTTON_HELD;
-		}
-	}
-	else 
-	{
-		if (leftTriggerWasPressed)
-		{
-			DIJoystickButtons[LEFT_TRIGGER_OFFSET] |= DI_BUTTON_RELEASED;
-			DIJoystickButtons[LEFT_TRIGGER_OFFSET] &= ~DI_BUTTON_HELD;
-		}
-	}
-
-	// Right Trigger
-	bool rightTriggerPressed = state.rightTrigger > TRIGGER_THRESHOLD;
-	bool rightTriggerWasPressed = (DIJoystickButtons[RIGHT_TRIGGER_OFFSET] & DI_BUTTON_HELD) != 0;
-
-	if (rightTriggerPressed)
-	{
-		if (!rightTriggerWasPressed)
-		{
-			DIJoystickButtons[RIGHT_TRIGGER_OFFSET] |= DI_BUTTON_HIT;
-			DIJoystickButtons[RIGHT_TRIGGER_OFFSET] |= DI_BUTTON_HELD;
-		}
-		else
-		{
-			DIJoystickButtons[RIGHT_TRIGGER_OFFSET] |= DI_BUTTON_HELD;
-		}
-	}
-	else
-	{
-		if (rightTriggerWasPressed)
-		{
-			DIJoystickButtons[RIGHT_TRIGGER_OFFSET] |= DI_BUTTON_RELEASED;
-			DIJoystickButtons[RIGHT_TRIGGER_OFFSET] &= ~DI_BUTTON_HELD;
-		}
-	}
+	// Triggers
+	UPDATE_BUTTON_STATE(DIJoystickButtons, LEFT_TRIGGER_OFFSET, state.leftTrigger > TRIGGER_THRESHOLD);
+	UPDATE_BUTTON_STATE(DIJoystickButtons, RIGHT_TRIGGER_OFFSET, state.rightTrigger > TRIGGER_THRESHOLD);
 
 	// Analog Sticks
 	float leftX = state.leftThumbstickX;
@@ -480,6 +431,14 @@ void DirectInput::ReadJoystick(void)
 
 	DIJoystickAxis[JOYSTICK_X_AXIS] = (long)(leftX * AXIS_SCALE);
 	DIJoystickAxis[JOYSTICK_Y_AXIS] = (long)(leftY * AXIS_SCALE);
+
+	// Treat these as buttons for movement
+	UPDATE_BUTTON_STATE(DIJoystickButtons, LSTICK_UP_OFFSET, state.leftThumbstickY > STICK_THRESHOLD);
+	UPDATE_BUTTON_STATE(DIJoystickButtons, LSTICK_DOWN_OFFSET, state.leftThumbstickY < -STICK_THRESHOLD);
+	UPDATE_BUTTON_STATE(DIJoystickButtons, LSTICK_LEFT_OFFSET, state.leftThumbstickX < -STICK_THRESHOLD);
+	UPDATE_BUTTON_STATE(DIJoystickButtons, LSTICK_RIGHT_OFFSET, state.leftThumbstickX > STICK_THRESHOLD);
+
+	// Right (Currently Camera)
 
 	float rightX = state.rightThumbstickX;
 	float rightY = -state.rightThumbstickY;  // Invert Y axis for camera

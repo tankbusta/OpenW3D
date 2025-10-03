@@ -254,6 +254,11 @@ StringID ButtonNames[] = {
 
 	{ DirectInput::BUTTON_CONTROLLER_LEFT_TRIGGER,	  "Cont_L_Trigger" },
 	{ DirectInput::BUTTON_CONTROLLER_RIGHT_TRIGGER,	  "Cont_R_Trigger" },
+
+	{ DirectInput::BUTTON_CONTROLLER_LSTICK_UP,		"Cont_L_Stick_Up" },
+	{ DirectInput::BUTTON_CONTROLLER_LSTICK_DOWN,	"Cont_L_Stick_Down" },
+	{ DirectInput::BUTTON_CONTROLLER_LSTICK_LEFT,	"Cont_L_Stick_Left" },
+	{ DirectInput::BUTTON_CONTROLLER_LSTICK_RIGHT,	"Cont_L_Stick_Right" },
 };
 
 #define	NUM_BUTTON_NAMES	( sizeof(ButtonNames) / sizeof(ButtonNames[0]) )
